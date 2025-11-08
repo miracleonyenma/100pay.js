@@ -1,6 +1,5 @@
 // src/index.ts
 
-import axios, { AxiosError, AxiosResponse } from "axios";
 import * as crypto from "crypto";
 import {
   CreateSubAccountData,
@@ -9,6 +8,7 @@ import {
 import {
   CurrencyConversionPayload,
   CurrencyConversionResult,
+  EnhancedConversionResponse,
   IBankListResponse,
   IBankTransferData,
   IBankTransferResponse,
@@ -25,7 +25,16 @@ import {
   ITransferFeeParams,
   ITransferFeeResponse,
 } from "./types/transfer";
+import { IAppInfo, IOAuthApp, ITokenData, IUserInfo } from "./types/oauth";
 import { logger } from "@untools/logger";
+
+export interface IApiResponse<T = unknown> {
+  success: boolean;
+  data: T;
+  message: string;
+  meta?: Record<string, unknown>;
+  [key: string]: unknown;
+}
 
 /**
  * Configuration interface for initializing the Pay100 SDK
@@ -46,29 +55,6 @@ interface IPay100Config {
 export interface ITransactionData {
   [key: string]: unknown;
 }
-
-/**
- * Interface for raw API responses before processing
- * Provides a flexible structure while capturing common response elements
- */
-interface IRawApiResponse {
-  status?: string;
-  message?: string;
-  data?: unknown;
-  [key: string]: unknown;
-}
-
-// /**
-//  * Standardized response interface for transaction verification
-//  * @property status - Result status ('success' or 'error')
-//  * @property data - Transaction details when successful, empty object on failure
-//  * @property message - Optional response message, typically present on errors
-//  */
-// interface IVerifyResponse {
-//   status: "success" | "error";
-//   data: ITransactionData | Record<string, never>;
-//   message?: string;
-// }
 
 // Default API endpoint if not otherwise specified
 const BASE_URL = process.env.BASE_URL || "https://api.100pay.co";
@@ -186,15 +172,20 @@ export class Pay100 {
     try {
       const payload = { transactionId };
 
-      const response: AxiosResponse<IRawApiResponse> = await axios({
-        method: "POST",
-        url: `${this.baseUrl}/api/v1/pay/crypto/payment/${transactionId}`,
-        headers: this.getHeaders(payload),
-        data: payload,
-      });
+      const response = await fetch(
+        `${this.baseUrl}/api/v1/pay/crypto/payment/${transactionId}`,
+        {
+          method: "POST",
+          headers: this.getHeaders(payload),
+          body: JSON.stringify(payload),
+        }
+      );
+
+      // Parse response data
+      const responseData: unknown = await response.json().catch(() => null);
 
       // Handle empty response
-      if (!response.data) {
+      if (!responseData) {
         return {
           status: "error",
           data: null,
@@ -204,8 +195,8 @@ export class Pay100 {
       }
 
       // Handle string responses which indicate errors
-      if (typeof response.data === "string") {
-        if (response.data === "Access Denied, Invalid KEY supplied") {
+      if (typeof responseData === "string") {
+        if (responseData === "Access Denied, Invalid KEY supplied") {
           return {
             status: "error",
             data: null,
@@ -213,16 +204,13 @@ export class Pay100 {
           };
         }
 
-        if (response.data === "invalid payment id supplied") {
+        if (responseData === "invalid payment id supplied") {
           return {
             status: "error",
             data: null,
           };
         }
       }
-
-      // Validate and transform response data to ensure type safety
-      const responseData = response.data;
 
       // Ensure the response data is an object that can be safely cast to ITransactionData
       const transactionData: IVerifyResponse["data"] =
@@ -236,16 +224,7 @@ export class Pay100 {
         data: transactionData,
       };
     } catch (error) {
-      // Handle Axios errors with detailed message
-      if (axios.isAxiosError(error)) {
-        const axiosError = error as AxiosError;
-        throw new PaymentVerificationError(
-          axiosError.message ||
-            "Something went wrong, be sure you supplied a valid payment id."
-        );
-      }
-
-      // Handle other errors with appropriate message
+      // Handle errors with appropriate message
       throw new PaymentVerificationError(
         error instanceof Error ? error.message : "An unknown error occurred"
       );
@@ -291,12 +270,18 @@ export class Pay100 {
      */
     preview: async (
       data: CurrencyConversionPayload
-    ): Promise<CurrencyConversionResult> => {
-      return this.request<CurrencyConversionResult>(
-        "POST",
-        "/api/v1/user/preview-convert-asset",
-        data
-      );
+    ): Promise<CurrencyConversionResult | EnhancedConversionResponse> => {
+      return this.request<
+        CurrencyConversionResult | EnhancedConversionResponse
+      >("POST", "/api/v1/user/preview-convert-asset", {
+        ...data,
+        ...(data.fromSymbol && {
+          from_symbol: data.fromSymbol,
+        }),
+        ...(data.toSymbol && {
+          to_symbol: data.toSymbol,
+        }),
+      });
     },
   };
 
@@ -315,10 +300,12 @@ export class Pay100 {
     executeTransfer: async (
       data: ITransferAssetData
     ): Promise<ITransferAssetResponse> => {
+      const { oauthAccessToken, ...transferData } = data;
       return this.request<ITransferAssetResponse>(
         "POST",
         "/api/v1/transfer/asset",
-        data
+        transferData,
+        oauthAccessToken ? { Authorization: `Bearer ${oauthAccessToken}` } : {}
       );
     },
 
@@ -425,6 +412,103 @@ export class Pay100 {
   };
 
   /**
+   * Namespace for OAuth 2.0 operations
+   */
+  oauth = {
+    /**
+     * Register a new OAuth application.
+     * @param data - Application details.
+     * @returns Promise resolving to the registered OAuth application details.
+     */
+    registerApp: async (data: {
+      appName: string;
+      appDescription: string;
+      appLogo: string;
+      redirectUris: string[];
+      allowedScopes: string[];
+    }): Promise<IOAuthApp> => {
+      return this.request<IOAuthApp>("POST", "/api/v1/oauth/register", data);
+    },
+
+    /**
+     * Get the authorization URL to redirect the user to.
+     * @param params - Authorization parameters.
+     * @returns Promise resolving to the authorization URL.
+     */
+    getAuthorizationUrl: async (params: {
+      client_id: string;
+      redirect_uri: string;
+      scope?: string;
+      state?: string;
+    }): Promise<string> => {
+      const response = await this.request<{
+        data: { authorizationUrl: string };
+      }>("GET", "/api/v1/oauth/authorize", params);
+      return response.data.authorizationUrl;
+    },
+
+    /**
+     * Exchange authorization code for an access token.
+     * @param data - Code exchange details.
+     * @returns Promise resolving to the token data.
+     */
+    exchangeCodeForToken: async (data: {
+      grant_type: "authorization_code";
+      code: string;
+      client_id: string;
+      client_secret: string;
+      redirect_uri: string;
+    }): Promise<IApiResponse<ITokenData>> => {
+      return this.request<IApiResponse<ITokenData>>(
+        "POST",
+        "/api/v1/oauth/token",
+        data
+      );
+    },
+
+    /**
+     * Get user information using the access token.
+     * @param accessToken - The access token.
+     * @returns Promise resolving to the user information.
+     */
+    getUserInfo: async (
+      accessToken: string
+    ): Promise<IApiResponse<IUserInfo>> => {
+      return this.request<IApiResponse<IUserInfo>>(
+        "GET",
+        "/api/v1/oauth/userinfo",
+        {},
+        { Authorization: `Bearer ${accessToken}` }
+      );
+    },
+
+    /**
+     * Get application information using the access token.
+     * @param accessToken - The access token.
+     * @returns Promise resolving to the application information.
+     */
+    getAppInfo: async (
+      accessToken: string
+    ): Promise<IApiResponse<IAppInfo>> => {
+      return this.request<IApiResponse<IAppInfo>>(
+        "GET",
+        "/api/v1/oauth/appinfo",
+        {},
+        { Authorization: `Bearer ${accessToken}` }
+      );
+    },
+
+    /**
+     * Revoke an access token.
+     * @param token - The access token to revoke.
+     * @returns Promise resolving when the token is revoked.
+     */
+    revokeToken: async (token: string): Promise<void> => {
+      return this.request<void>("POST", "/api/v1/oauth/revoke", { token });
+    },
+  };
+
+  /**
    * Generic method to make authenticated API requests to any endpoint
    *
    * @param method - HTTP method to use (GET, POST, PUT, DELETE)
@@ -436,50 +520,59 @@ export class Pay100 {
   async request<T>(
     method: "GET" | "POST" | "PUT" | "DELETE",
     endpoint: string,
-    data: Record<string, unknown> = {}
+    data: Record<string, unknown> = {},
+    customHeaders: Record<string, string> = {}
   ): Promise<T> {
     try {
-      const url = `${this.baseUrl}${endpoint}`;
-      const headers = this.getHeaders(data);
+      // Build URL with query parameters for GET requests
+      const url =
+        method === "GET" && Object.keys(data).length > 0
+          ? `${this.baseUrl}${endpoint}?${new URLSearchParams(
+              data as Record<string, string>
+            )}`
+          : `${this.baseUrl}${endpoint}`;
 
-      const response = await axios({
+      const headers = this.getHeaders(data);
+      const options = {
         method,
-        url,
-        headers,
-        data: method !== "GET" ? data : undefined,
-        params: method === "GET" ? data : undefined,
-      });
+        headers: { ...headers, ...customHeaders },
+        body: method !== "GET" ? JSON.stringify(data) : undefined,
+      };
+      logger?.debug(`Request to ${url}`, { options });
+      const response = await fetch(url, options);
+
+      // Handle response.ok check and throw errors for failed requests
+      if (!response.ok) {
+        const errorData: unknown = await response.json().catch(() => ({}));
+        logger.error(errorData);
+        const errorMessage = this.extractErrorMessage(errorData);
+        throw new Error(`API Request Failed: ${errorMessage}`);
+      }
+
+      // Parse JSON response
+      const responseData: unknown = await response.json();
 
       // Check if the response indicates an error despite a successful HTTP status
       if (
-        response.data &&
-        typeof response.data === "object" &&
-        "success" in response.data
+        responseData &&
+        typeof responseData === "object" &&
+        "success" in responseData
       ) {
-        if ((response.data as { success?: boolean }).success === false) {
+        if ((responseData as { success?: boolean }).success === false) {
           // Extract error from the API's own error indication
-          const errorMessage = this.extractErrorMessage(response.data);
+          const errorMessage = this.extractErrorMessage(responseData);
           throw new Error(`API Request Failed: ${errorMessage}`);
         }
       }
 
-      return response.data as T;
+      return responseData as T;
     } catch (error) {
-      logger.error(error);
-      if (axios.isAxiosError(error)) {
-        const axiosError = error as AxiosError;
-        logger.error(axiosError?.response);
-
-        // Extract error message from response data if available
-        const errorMessage = axiosError.response?.data
-          ? this.extractErrorMessage(axiosError.response.data)
-          : axiosError.message;
-
-        throw new Error(`API Request Failed: ${errorMessage}`);
+      if (error instanceof Error) {
+        throw error;
       }
 
-      // Rethrow original error if not an Axios error
-      throw error;
+      // Handle unexpected error types
+      throw new Error(`API Request Failed: ${String(error)}`);
     }
   }
 
@@ -571,3 +664,4 @@ export class Pay100 {
 
 export * from "./types";
 export * from "./types/transfer";
+export * from "./types/oauth";

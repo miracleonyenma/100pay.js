@@ -34,6 +34,8 @@ export interface ITransferAssetData extends Record<string, unknown> {
   transferType?: "internal" | "external";
   /** Optional note or memo for the transfer */
   note?: string;
+  /** Optional Access Token for OAuth 2.0 authentication */
+  oauthAccessToken?: string;
 }
 
 /**

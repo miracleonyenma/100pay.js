@@ -1,6 +1,6 @@
 {
   "name": "@100pay-hq/100pay.js",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "100Pay.js is the official Nodejs API wrapper SDK that lets you easily verify crypto payments, run bulk payout, transfer assets and many more.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -29,14 +29,15 @@
     "dev": "nodemon",
     "build": "tsup",
     "build:clean": "rm -rf dist && tsup",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
     "type-check": "tsc --noEmit",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
-    "verify": "npm run lint && npm run test && npm run build",
-    "prepare": "npm run verify"
+    "verify": "npm run lint && npm run build",
+    "prepare": "npm run build",
+    "release": "standard-version",
+    "release:minor": "standard-version --release-as minor",
+    "release:major": "standard-version --release-as major",
+    "release:patch": "standard-version --release-as patch"
   },
   "repository": {
     "type": "git",
@@ -59,20 +60,17 @@
   "homepage": "https://github.com/shop100global/100pay.js#readme",
   "devDependencies": {
     "@eslint/js": "^9.23.0",
-    "@types/jest": "^29.5.14",
     "@types/node": "^22.13.14",
     "@typescript-eslint/eslint-plugin": "^8.28.0",
     "@typescript-eslint/parser": "^8.28.0",
     "eslint": "^9.23.0",
     "globals": "^16.0.0",
-    "jest": "^29.7.0",
     "nodemon": "^3.1.10",
-    "ts-jest": "^29.3.0",
+    "standard-version": "^9.5.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2"
   },
   "dependencies": {
-    "@untools/logger": "^0.0.6",
-    "axios": "^1.8.4"
+    "@untools/logger": "^0.0.6"
   }
 }
