@@ -149,7 +149,7 @@ try {
 
 Subaccounts allow you to create and manage separate accounts under your main account.
 
-> **Note:** The `networks` array should contain lowercase network names (e.g., `"ethereum"`, `"bsc"`).
+> **Important:** The `networks` array must contain lowercase network names (e.g., `"ethereum"`, `"bsc"`, `"polygon"`, `"tron"`, `"sol"`, `"bitcoin"`).
 
 ```typescript
 // Create a subaccount
@@ -173,7 +173,7 @@ const subaccount = await client.subaccounts.create({
 ```typescript
 interface CreateSubAccountData {
   symbols: string[]; // List of supported cryptocurrencies
-  networks: string[]; // List of supported blockchain networks
+  networks: string[]; // List of supported blockchain networks (must be lowercase)
   owner: {
     name: string; // Owner's name
     email: string; // Owner's email
@@ -251,7 +251,7 @@ interface Crypto {
 try {
   const result = await client.subaccounts.create({
     symbols: ["USDT", "BTC"],
-    networks: ["ETHEREUM"],
+    networks: ["ethereum"],
     owner: {
       name: "Merchant Store",
       email: "merchant@example.com",
@@ -363,10 +363,11 @@ Transfer assets between wallets and manage transfer operations:
 // Execute an asset transfer
 const transfer = await client.transfer.executeTransfer({
   amount: 100,
-  symbol: "USDT", // Use 'symbol' not 'currency'
-  to: "0x1234567890abcdef...", // Use 'to' not 'recipientAddress'
-  transferType: "external", // Optional: "internal" or "external"
-  note: "Payment for services", // Optional note
+  symbol: "USDT",
+  to: "0x1234567890abcdef...",
+  transferType: "external",
+  note: "Payment for services",
+  oauthAccessToken: "your_oauth_token", // Optional: for OAuth 2.0 authentication
 });
 
 // Get transfer history
@@ -374,14 +375,111 @@ const history = await client.transfer.getHistory({
   page: 1,
   limit: 10,
   symbols: ["USDT"], // Optional filter by symbols
-  type: "debit", // Optional filter by type
+  type: "credit", // Optional filter: "credit" or "debit"
+  accountIds: ["account_123"], // Optional filter by account IDs
+  addresses: ["0x..."], // Optional filter by addresses
 });
 
 // Calculate transfer fees
 const fees = await client.transfer.calculateFee({
-  symbol: "USDT", // Use 'symbol' not 'currency'
-  transferType: "external", // Use "internal" or "external"
+  symbol: "USDT",
+  transferType: "external",
 });
+```
+
+**Transfer Parameters:**
+
+```typescript
+interface ITransferAssetData {
+  amount: number | string; // Amount to transfer (must be greater than zero)
+  symbol: string; // Asset symbol/currency code
+  to: string; // Destination address or account identifier
+  transferType?: "internal" | "external"; // Type of transfer
+  note?: string; // Optional note or memo
+  oauthAccessToken?: string; // Optional OAuth 2.0 access token
+}
+```
+
+**Transfer Response:**
+
+```typescript
+interface ITransferAssetResponse {
+  statusCode: number;
+  message: string;
+  data: {
+    receipt: string; // Transaction receipt/confirmation
+    transactionId: string; // Unique transaction identifier
+    timestamp: string | number; // Transaction timestamp
+  };
+}
+```
+
+**History Parameters:**
+
+```typescript
+interface ITransferHistoryParams {
+  accountIds?: string[]; // Filter by account IDs
+  addresses?: string[]; // Filter by addresses
+  symbols?: string[]; // Filter by currency symbols
+  page?: number; // Page number for pagination
+  limit?: number; // Records per page
+  type?: string; // Filter by type: "credit" or "debit"
+}
+```
+
+**History Response:**
+
+```typescript
+interface ITransferHistoryResponse {
+  statusCode: number;
+  message: string;
+  data: ITransferHistoryItem[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    pages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
+}
+
+interface ITransferHistoryItem {
+  _id: string;
+  accountId: string;
+  subAccountId: string;
+  appId: string;
+  userId: string;
+  symbol: string;
+  from: string;
+  to: string;
+  type: "credit" | "debit";
+  description: string;
+  failureReason: string;
+  transactionHash?: string | null;
+  transactionSignature: string;
+  status?: string;
+  amount: string;
+  note?: string; // Optional note attached to the transfer
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+```
+
+**Fee Response:**
+
+```typescript
+interface ITransferFeeResponse {
+  statusCode: number;
+  message: string;
+  data: {
+    baseFee: string | number; // Base fee amount
+    networkFee?: string | number; // Network fee (for blockchain transfers)
+    totalFee: string | number; // Total fee to be paid
+    feeSymbol: string; // Currency symbol of the fee
+    networkCongestion?: "low" | "medium" | "high"; // Current network congestion level
+  };
+}
 ```
 
 ### Wallet Operations
@@ -396,7 +494,7 @@ console.log(`Supported wallets:`, wallets);
 
 ### Bank Transfers
 
-The SDK now supports bank transfer operations including getting bank lists, verifying accounts, and executing transfers:
+The SDK supports bank transfer operations including getting bank lists, verifying accounts, and executing transfers:
 
 ```typescript
 // Get list of supported banks
@@ -417,7 +515,7 @@ if (verification.data.verified) {
     beneficiaryBankCode: "044",
     beneficiaryAccountNumber: "1234567890",
     beneficiaryAccountName: "John Doe",
-    amount: 500, // Amount in Naira (NGN 500)
+    amount: 50000, // Amount in Naira (₦50,000)
     narration: "Payment for services",
     paymentReference: `ref_${Date.now()}`,
     saveBeneficiary: true,
@@ -499,14 +597,67 @@ const transfer = await client.bankTransfer.transfer({
   beneficiaryBankCode: "044",
   beneficiaryAccountNumber: "1234567890",
   beneficiaryAccountName: "John Doe",
-  amount: 50000,
+  amount: 50000, // Amount in Nigerian Naira (NGN)
   narration: "Payment description",
   paymentReference: "unique_ref_123",
   saveBeneficiary: true,
 });
 ```
 
+**Parameters:**
+
+```typescript
+interface IBankTransferData {
+  beneficiaryBankCode: string; // Recipient's bank code
+  beneficiaryAccountNumber: string; // Recipient's account number
+  beneficiaryAccountName: string; // Recipient's account name
+  amount: number; // Amount in Nigerian Naira (NGN)
+  narration: string; // Transfer description
+  paymentReference: string; // Unique payment reference
+  saveBeneficiary: boolean; // Whether to save this beneficiary
+}
+```
+
+**Returns:**
+
+```typescript
+interface IBankTransferResponse {
+  statusCode: number;
+  message: string;
+  data: {
+    transfer: {
+      sessionId: string;
+      status: string;
+      amount: number;
+      beneficiaryAccountNumber: string;
+      beneficiaryBankCode: string;
+      paymentReference: string;
+      narration: string;
+      createdAt: string;
+    };
+  };
+}
+```
+
 ### OAuth 2.0 Authorization
+
+The SDK provides comprehensive OAuth 2.0 methods for secure authorization:
+
+#### Register an OAuth Application
+
+```typescript
+// Register a new OAuth application
+const app = await client.oauth.registerApp({
+  appName: "My Application",
+  appDescription: "Description of my app",
+  appLogo: "https://example.com/logo.png",
+  redirectUris: ["https://myapp.com/callback"],
+  allowedScopes: ["read_user_info", "read_app_info"],
+});
+
+console.log(`Client ID: ${app.clientId}`);
+console.log(`Client Secret: ${app.clientSecret}`);
+```
 
 #### Get Authorization URL
 
@@ -546,74 +697,52 @@ const appInfoResponse = await client.oauth.getAppInfo(tokenData.access_token);
 const appInfo = appInfoResponse.data;
 ```
 
-**Parameters:**
+#### Revoke Token
 
 ```typescript
-interface IBankTransferData {
-  beneficiaryBankCode: string; // Recipient's bank code
-  beneficiaryAccountNumber: string; // Recipient's account number
-  beneficiaryAccountName: string; // Recipient's account name
-  amount: number; // Amount in Naira
-  narration: string; // Transfer description
-  paymentReference: string; // Unique payment reference
-  saveBeneficiary: boolean; // Whether to save this beneficiary
-}
+await client.oauth.revokeToken(tokenData.access_token);
+console.log("Token revoked successfully");
 ```
 
-**Returns:**
+**OAuth Types:**
 
 ```typescript
-interface IBankTransferResponse {
-  statusCode: number;
-  message: string;
-  data: {
-    transfer: {
-      sessionId: string;
-      status: string;
-      amount: number;
-      beneficiaryAccountNumber: string;
-      beneficiaryBankCode: string;
-      paymentReference: string;
-      narration: string;
-      createdAt: string;
-    };
-  };
+interface IOAuthApp {
+  clientId: string;
+  clientSecret: string;
+  appName: string;
+  redirectUris: string[];
+  allowedScopes: string[];
 }
-```
 
-### OAuth 2.0
+interface ITokenData {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  scope: string;
+}
 
-The SDK provides methods for OAuth 2.0 authorization:
+interface IUserInfo {
+  id: string;
+  first_name: string;
+  last_name: string;
+  username: string;
+  country: string;
+  avatar: string;
+  email: string;
+  isEmailVerified: boolean;
+  phone: string;
+  verified: boolean;
+}
 
-```typescript
-// Get authorization URL
-const authUrl = await client.oauth.getAuthorizationUrl({
-  client_id: "your_client_id",
-  redirect_uri: "https://yourapp.com/callback",
-  scope: "read_user_info read_app_info",
-  state: "some_random_state",
-});
-
-// Exchange code for access token
-const tokenResponse = await client.oauth.exchangeCodeForToken({
-  grant_type: "authorization_code",
-  code: "authorization_code",
-  client_id: "your_client_id",
-  client_secret: "your_client_secret",
-  redirect_uri: "https://yourapp.com/callback",
-});
-
-// Get user info
-const userInfoResponse = await client.oauth.getUserInfo(
-  tokenResponse.data.access_token
-);
-const userInfo = userInfoResponse.data;
-
-// Get app info
-const appInfoResponse = await client.oauth.getAppInfo(
-  tokenResponse.data.access_token
-);
-const appInfo = appInfoResponse.data;
+interface IAppInfo {
+  id: string;
+  app_name: string;
+  business_name: string;
+  country: string;
+  status: string;
+  support_email: string;
+}
 ```
 
 ### Generic API Requests
@@ -624,17 +753,20 @@ The SDK provides a generic `request` method for making any API call to the 100Pa
 const response = await client.request<ResponseType>(
   method, // 'GET', 'POST', 'PUT', or 'DELETE'
   endpoint, // API endpoint path
-  data // Request payload
+  data, // Request payload or query parameters
+  customHeaders // Optional: custom headers (e.g., Authorization)
 );
 ```
 
 **Example:**
 
 ```typescript
-// Get user app balance
+// Get user app balance with custom headers
 const balance = await client.request<BalanceResponse>(
   "GET",
-  "/api/v1/user-apps/:appId/wallet-balance/:symbol"
+  "/api/v1/user-apps/:appId/wallet-balance/:symbol",
+  {},
+  { Authorization: `Bearer ${accessToken}` }
 );
 ```
 
@@ -688,6 +820,7 @@ import {
   ITransferAssetResponse,
   ITransferHistoryParams,
   ITransferHistoryResponse,
+  ITransferHistoryItem,
   ITransferFeeParams,
   ITransferFeeResponse,
   ISupportedWalletResponse,
@@ -792,7 +925,7 @@ async function performBankTransfer() {
       beneficiaryBankCode: targetBank.bankCode!,
       beneficiaryAccountNumber: "1234567890",
       beneficiaryAccountName: verification.data.accountName,
-      amount: 500, // NGN 500 in Naira
+      amount: 50000, // ₦50,000 in Nigerian Naira
       narration: "Payment for services rendered",
       paymentReference: `PAY_${Date.now()}`,
       saveBeneficiary: true,
@@ -813,35 +946,48 @@ async function performBankTransfer() {
 // Complete OAuth 2.0 workflow
 async function performOAuth() {
   try {
-    // 1. Get authorization URL
+    // 1. Register OAuth application (one-time setup)
+    const app = await client.oauth.registerApp({
+      appName: "My Application",
+      appDescription: "My app description",
+      appLogo: "https://example.com/logo.png",
+      redirectUris: ["https://myapp.com/callback"],
+      allowedScopes: ["read_user_info", "read_app_info"],
+    });
+
+    // 2. Get authorization URL
     const authUrl = await client.oauth.getAuthorizationUrl({
-      client_id: "your_client_id",
-      redirect_uri: "https://yourapp.com/callback",
+      client_id: app.clientId,
+      redirect_uri: "https://myapp.com/callback",
       scope: "read_user_info read_app_info",
       state: "some_random_state",
     });
     console.log(`Authorization URL: ${authUrl}`);
 
-    // 2. Exchange code for access token
+    // 3. Exchange code for access token (after user authorizes)
     const tokenResponse = await client.oauth.exchangeCodeForToken({
       grant_type: "authorization_code",
-      code: "authorization_code",
-      client_id: "your_client_id",
-      client_secret: "your_client_secret",
-      redirect_uri: "https://yourapp.com/callback",
+      code: "authorization_code_from_callback",
+      client_id: app.clientId,
+      client_secret: app.clientSecret,
+      redirect_uri: "https://myapp.com/callback",
     });
 
-    // 3. Get user info
+    // 4. Get user info
     const userInfoResponse = await client.oauth.getUserInfo(
       tokenResponse.data.access_token
     );
     console.log(`User info:`, userInfoResponse.data);
 
-    // 4. Get app info
+    // 5. Get app info
     const appInfoResponse = await client.oauth.getAppInfo(
       tokenResponse.data.access_token
     );
     console.log(`App info:`, appInfoResponse.data);
+
+    // 6. Revoke token when done
+    await client.oauth.revokeToken(tokenResponse.data.access_token);
+    console.log("Token revoked successfully");
   } catch (error) {
     console.error(`OAuth workflow failed: ${error.message}`);
     throw error;
@@ -883,12 +1029,14 @@ interface BankTransferWebhook {
 }
 ```
 
-**Webhook Event Types:**
+**Common Webhook Event Types:**
 
 - `bank_transfer.debit` - Outgoing bank transfer initiated
 - `bank_transfer.credit` - Incoming bank transfer received
 - `wallet.deposit` - Wallet deposit received
 - `wallet.deposit.internal` - Internal wallet deposit received
+
+> **Note:** Refer to the [100Pay API documentation](https://documenter.getpostman.com/view/13045730/2s93RMUatE) for a complete list of webhook events and their payloads.
 
 Always verify webhook signatures and use the SDK's `verify()` method to confirm transaction details.
 
