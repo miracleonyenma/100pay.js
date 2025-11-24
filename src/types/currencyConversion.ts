@@ -1,3 +1,5 @@
+// ./src/types/currencyConversion.ts
+
 /* eslint-disable @typescript-eslint/no-redundant-type-constituents */
 type CurrencyConversionPayload = Record<string, unknown> & {
   amount: number;

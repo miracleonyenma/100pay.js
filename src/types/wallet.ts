@@ -1,4 +1,4 @@
-// import { ITransactionData } from "..";
+// ./src/types/wallet.ts
 
 export type Network =
   | "bsc"

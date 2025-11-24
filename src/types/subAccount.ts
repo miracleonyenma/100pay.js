@@ -1,3 +1,5 @@
+// ./src/types/subAccount.ts
+
 type CreateSubAccountData = {
   symbols: string[];
   networks: string[];

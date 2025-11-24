@@ -1,3 +1,5 @@
+// ./src/types/index.ts
+
 export * from "./subAccount";
 export * from "./currencyConversion";
 export * from "./transfer";

@@ -1,3 +1,5 @@
+// ./src/types/oauth.ts
+
 export interface IOAuthApp {
   clientId: string;
   clientSecret: string;

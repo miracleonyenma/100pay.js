@@ -5,3 +5,4 @@ dist/
 
 # Exclude
 !CHANGELOG.md
+!README.MD
