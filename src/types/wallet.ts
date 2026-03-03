@@ -214,3 +214,74 @@ export interface IVerifyResponse {
   data?: DataType | null;
   message?: string;
 }
+
+/** Query parameters for wallet balance retrieval */
+export interface IWalletBalanceParams extends Record<string, unknown> {
+  /** Optional currency symbol to filter by (e.g. "BTC", "USDT", "NGN") */
+  symbol?: string;
+  /** Optional target currency for conversion (e.g. "USD"). Defaults to app currency. */
+  targetCurrency?: string;
+}
+
+/** Converted balance breakdown in a target currency */
+export interface IConvertedBalance {
+  currency: string;
+  totalBalance: number;
+  successfulBalance: number;
+  pendingBalance: number;
+  totalCredit: number;
+  totalDebit: number;
+  exchangeRate?: number;
+  ratesSource?: string;
+  conversionNote?: string;
+}
+
+/** Balance data for a single currency symbol */
+export interface IWalletBalanceItem {
+  symbol: string;
+  totalBalance: number;
+  successfulBalance: number;
+  pendingBalance: number;
+  totalCredit: number;
+  totalDebit: number;
+  transactionCount: number;
+  walletCount: number;
+  converted: IConvertedBalance;
+}
+
+/** Response when querying a specific symbol */
+export interface IWalletBalanceSingleResponse {
+  success: boolean;
+  message: string;
+  data: IWalletBalanceItem;
+  meta: Record<string, unknown>;
+}
+
+/** Response when querying all balances (no symbol filter) */
+export interface IWalletBalanceAllResponse {
+  success: boolean;
+  message: string;
+  data: {
+    balances: IWalletBalanceItem[];
+    summary: {
+      totalWallets: number;
+      totalSymbols: number;
+    };
+    convertedSummary: {
+      currency: string;
+      totalBalance: number;
+      successfulBalance: number;
+      pendingBalance: number;
+      totalCredit: number;
+      totalDebit: number;
+      conversionErrors: number;
+      note: string;
+    };
+  };
+  meta: Record<string, unknown>;
+}
+
+/** Union response type — single symbol or all balances */
+export type IWalletBalanceResponse =
+  | IWalletBalanceSingleResponse
+  | IWalletBalanceAllResponse;
