@@ -341,10 +341,10 @@ try {
   if ("convertedAmount" in preview) {
     console.log(`You will receive: ${preview.convertedAmount} USDT`);
     console.log(
-      `Exchange rate: 1 BTC = ${preview.toRate / preview.fromRate} USDT`
+      `Exchange rate: 1 BTC = ${preview.toRate / preview.fromRate} USDT`,
     );
     console.log(
-      `Total fees: ${preview.feeInUSD} USD (${preview.feeInFromCurrency} BTC)`
+      `Total fees: ${preview.feeInUSD} USD (${preview.feeInFromCurrency} BTC)`,
     );
   } else {
     // Handle enhanced response
@@ -754,7 +754,7 @@ const response = await client.request<ResponseType>(
   method, // 'GET', 'POST', 'PUT', or 'DELETE'
   endpoint, // API endpoint path
   data, // Request payload or query parameters
-  customHeaders // Optional: custom headers (e.g., Authorization)
+  customHeaders, // Optional: custom headers (e.g., Authorization)
 );
 ```
 
@@ -766,7 +766,7 @@ const balance = await client.request<BalanceResponse>(
   "GET",
   "/api/v1/user-apps/:appId/wallet-balance/:symbol",
   {},
-  { Authorization: `Bearer ${accessToken}` }
+  { Authorization: `Bearer ${accessToken}` },
 );
 ```
 
@@ -881,10 +881,10 @@ const preview = await client.conversion.preview({
 if ("convertedAmount" in preview) {
   console.log(`You will receive approximately ${preview.convertedAmount} BTC`);
   console.log(
-    `Exchange rate: 1 USDT = ${preview.toRate / preview.fromRate} BTC`
+    `Exchange rate: 1 USDT = ${preview.toRate / preview.fromRate} BTC`,
   );
   console.log(
-    `Fee: ${preview.feeInFromCurrency} USDT (${preview.feeInUSD} USD)`
+    `Fee: ${preview.feeInFromCurrency} USDT (${preview.feeInUSD} USD)`,
   );
 } else {
   // Handle enhanced response
@@ -904,7 +904,7 @@ async function performBankTransfer() {
 
     // 2. Find the desired bank
     const targetBank = banks.data.banks.find((bank) =>
-      bank.name?.includes("Access")
+      bank.name?.includes("Access"),
     );
     if (!targetBank) throw new Error("Bank not found");
 
@@ -975,13 +975,13 @@ async function performOAuth() {
 
     // 4. Get user info
     const userInfoResponse = await client.oauth.getUserInfo(
-      tokenResponse.data.access_token
+      tokenResponse.data.access_token,
     );
     console.log(`User info:`, userInfoResponse.data);
 
     // 5. Get app info
     const appInfoResponse = await client.oauth.getAppInfo(
-      tokenResponse.data.access_token
+      tokenResponse.data.access_token,
     );
     console.log(`App info:`, appInfoResponse.data);
 
@@ -997,48 +997,487 @@ async function performOAuth() {
 
 ## Webhook Handling
 
-100Pay sends webhooks for various events. Here's an example bank transfer debit webhook payload:
+100Pay sends webhooks for various events. Webhook payloads can be categorized into `bank_transfer`, `charge`, and `internal_transfer` events. Below are the type definitions and **real payload examples** for each event type, highlighting the **`type`**, **`eventType`**, and **`transferType`** fields where available.
+
+### Setting Up a Webhook Handler
 
 ```typescript
-interface BankTransferWebhook {
-  eventType: "bank_transfer.debit";
+import express from "express";
+
+const app = express();
+app.use(express.json());
+
+app.post("/webhooks/100pay", (req, res) => {
+  const payload = req.body;
+
+  // Route the event based on eventType or type
+  if (payload.eventType === "bank_transfer.debit") {
+    handleBankTransferWithdrawal(payload);
+  } else if (payload.eventType === "wallet.deposit.internal") {
+    handleInternalDeposit(payload);
+  } else if (payload.eventType === "transaction.withdrawal") {
+    handleInternalWithdrawal(payload);
+  } else if (payload.type === "credit" && payload.chargeId) {
+    handlePaymentCharge(payload);
+  }
+
+  res.sendStatus(200);
+});
+```
+
+---
+
+### 1. Bank Transfer Withdrawal
+
+Triggered when an outgoing bank transfer is initiated from your account to an external bank.
+
+**Type Definition:**
+
+```typescript
+interface BankTransferWithdrawalWebhook {
+  eventType: "bank_transfer.debit"; // 👈 Identifies the event
   transactionId: string;
   reference: string;
   amount: number;
   timestamp: string;
   transaction: {
-    status: "pending" | "completed" | "failed";
+    transactionHash: string;
+    status: "successful" | "pending" | "failed";
+    amount: string;
+    category: string;
+    _id: string;
+    transactionSignature: string;
+    type: "debit"; // 👈 Transaction direction
+    accountId: string;
+    appId: string;
     from: string;
+    symbol: string;
     to: string;
-    metadata: {
-      paymentReference: string;
-      description: string;
-      fees: number;
-    };
-    // ... other fields
   };
   data: {
+    type: "Outwards"; // 👈 Indicates an outgoing transfer
     sessionId: string;
+    paymentReference: string;
+    provider: string;
+    providerChannel: string;
+    destinationInstitutionCode: string;
     creditAccountName: string;
     creditAccountNumber: string;
+    debitAccountName: string;
+    amount: number;
+    fees: number;
+    vat: number;
+    stampDuty: number;
     status: "Created" | "Processing" | "Successful" | "Failed";
     narration: string;
-    fees: number;
-    // ... other fields
   };
 }
 ```
 
-**Common Webhook Event Types:**
+**Example Payload:**
 
-- `bank_transfer.debit` - Outgoing bank transfer initiated
-- `bank_transfer.credit` - Incoming bank transfer received
-- `wallet.deposit` - Wallet deposit received
-- `wallet.deposit.internal` - Internal wallet deposit received
+```json
+{
+  "eventType": "bank_transfer.debit",
+  "transactionId": "abc123def456ghi789jkl012",
+  "reference": "TXF-1700000000000-ab12-cd34",
+  "amount": 50,
+  "timestamp": "2026-03-12T14:45:46.995Z",
+  "transaction": {
+    "transactionHash": "090000000000000000000000000000",
+    "status": "successful",
+    "amount": "50",
+    "category": "uncategorized",
+    "_id": "abc123def456ghi789jkl012",
+    "transactionSignature": "pre-1700000000000-xxxxxxxxx-debit-JOHN DOE / 0123456789-My Business",
+    "type": "debit",
+    "accountId": "acc_0000000000000000000000",
+    "appId": "app_0000000000000000000000",
+    "from": "My Business",
+    "symbol": "NGN",
+    "to": "JOHN DOE / 0123456789"
+  },
+  "data": {
+    "type": "Outwards",
+    "sessionId": "090000000000000000000000000000",
+    "paymentReference": "TXF-1700000000000-ab12-cd34",
+    "provider": "NIBSS",
+    "providerChannel": "NIP",
+    "providerChannelCode": "2",
+    "destinationInstitutionCode": "100004",
+    "creditAccountName": "JOHN DOE",
+    "creditAccountNumber": "0123456789",
+    "debitAccountName": "ACME TECHNOLOGIES LIMITED / CURRENT",
+    "narration": "Payment for consulting services",
+    "amount": 50,
+    "fees": 10,
+    "vat": 0.75,
+    "stampDuty": 0,
+    "status": "Created"
+  }
+}
+```
+
+**Handler Example:**
+
+```typescript
+function handleBankTransferWithdrawal(payload: BankTransferWithdrawalWebhook) {
+  const { reference, amount, transaction, data } = payload;
+
+  console.log(`Bank transfer initiated`);
+  console.log(`Reference: ${reference}`);
+  console.log(
+    `Amount: ₦${amount} → ${data.creditAccountName} (${data.creditAccountNumber})`,
+  );
+  console.log(`Status: ${transaction.status}`);
+  console.log(`Session ID: ${data.sessionId}`);
+
+  // Update your database, notify your user, etc.
+}
+```
+
+---
+
+### 2. Payment Charge (Bank Transfer or Crypto)
+
+Triggered when a payment charge is confirmed — covers both bank transfer top-ups and crypto payments.
+
+**Type Definition:**
+
+```typescript
+interface PaymentChargeWebhook {
+  type: "credit"; // 👈 Charge direction
+  _id: string;
+  chargeId: string;
+  reference: string;
+  data: {
+    from: string;
+    to: string;
+    transaction_id: string;
+    status: "CONFIRMED" | "PENDING" | "FAILED";
+    timestamp: string;
+    value: {
+      local: { amount: string; currency: string };
+      crypto: { amount: number; currency: string };
+    };
+    metadata?: {
+      sessionId?: string;
+      provider?: string;
+      originalAmount?: number;
+      fees?: number;
+      sessionCurrency?: string;
+    };
+    charge: {
+      customer: { user_id: string; name: string; email: string; phone: string };
+      billing: {
+        currency: string;
+        amount: string;
+        description: string;
+        pricing_type: string;
+      };
+      status: {
+        value: "paid" | "pending" | "failed";
+        total_paid: number;
+      };
+      ref_id: string;
+      payments: PaymentRecord[];
+      charge_source: string;
+      call_back_url: string;
+      app_id: string;
+    };
+  };
+  appId: string;
+  cryptoChargeId: string;
+  createdAt: string;
+}
+```
+
+**Example Payload — Bank Transfer Top-up:**
+
+```json
+{
+  "type": "credit",
+  "_id": "charge_event_0000000000000000",
+  "chargeId": "charge_0000000000000000",
+  "reference": "AbCdEfGhIjKlMnOp",
+  "data": {
+    "from": "0123456789",
+    "to": "9876543210",
+    "transaction_id": "100000000000000000000000000000",
+    "status": "CONFIRMED",
+    "timestamp": "2026-03-12T14:40:29.987Z",
+    "value": {
+      "local": { "amount": "50.00", "currency": "NGN" },
+      "crypto": { "amount": 50, "currency": "NGN" }
+    },
+    "metadata": {
+      "sessionId": "VIR_SESSION_0000000000000_XXXXXXXX",
+      "provider": "safehaven",
+      "originalAmount": 55,
+      "fees": 5,
+      "sessionCurrency": "NGN"
+    },
+    "charge": {
+      "customer": {
+        "user_id": "1",
+        "name": "Jane Smith",
+        "email": "jane.smith@example.com",
+        "phone": "08000000000"
+      },
+      "billing": {
+        "currency": "NGN",
+        "vat": 0,
+        "pricing_type": "fixed_price",
+        "amount": "50",
+        "description": "Funding my account",
+        "country": "NG"
+      },
+      "status": {
+        "context": { "status": "paid", "value": 50 },
+        "value": "paid",
+        "total_paid": 50
+      },
+      "ref_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+      "charge_source": "external",
+      "call_back_url": "https://yourapp.com/verify-order/",
+      "app_id": "app_0000000000000000000000"
+    }
+  },
+  "appId": "app_0000000000000000000000",
+  "cryptoChargeId": "crypto_charge_0000000000000000",
+  "createdAt": "2026-03-12T14:40:29.998Z"
+}
+```
+
+**Handler Example:**
+
+```typescript
+function handlePaymentCharge(payload: PaymentChargeWebhook) {
+  const { reference, data } = payload;
+  const { charge, value, status } = data;
+
+  if (status !== "CONFIRMED") {
+    console.warn(`Charge ${reference} not yet confirmed. Status: ${status}`);
+    return;
+  }
+
+  console.log(`Payment confirmed for ${charge.customer.email}`);
+  console.log(`Amount: ${value.local.currency} ${value.local.amount}`);
+  console.log(`Charge status: ${charge.status.value}`);
+  console.log(`Total paid: ${charge.status.total_paid}`);
+
+  // Fulfill the order, credit the user's account, etc.
+}
+```
+
+---
+
+### 3. Internal Transfer Withdrawal
+
+Triggered when funds are sent from your wallet to another internal 100Pay wallet.
+
+**Type Definition:**
+
+```typescript
+interface InternalTransferWithdrawalWebhook {
+  eventType: "transaction.withdrawal"; // 👈 Identifies the event
+  eventId: string;
+  timestamp: string;
+  transactionId: string;
+  transactionHash: string;
+  amount: string;
+  currency: string;
+  type: "debit"; // 👈 Transaction direction
+  status: "successful" | "pending" | "failed";
+  description: string;
+  from: string;
+  to: string;
+  category: "internal_transfer";
+  metadata: {
+    transferType: "internal"; // 👈 Confirms internal transfer
+    recipientWalletId: string;
+    recipientUserId: string;
+    note?: string;
+    exchangeRates?: ExchangeRate[];
+  };
+}
+```
+
+**Example Payload:**
+
+```json
+{
+  "eventType": "transaction.withdrawal",
+  "eventId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "timestamp": "2026-03-12T13:42:46.165Z",
+  "transactionId": "txn_0000000000000000000000",
+  "transactionHash": "DR_0000000000000_XXXXXXXX",
+  "amount": "100",
+  "currency": "NGN",
+  "type": "debit",
+  "status": "successful",
+  "description": "Internal transfer to 160005",
+  "from": "625988",
+  "to": "160005",
+  "category": "internal_transfer",
+  "metadata": {
+    "recipientWalletId": "wallet_0000000000000000000000",
+    "recipientUserId": "user_0000000000000000000000",
+    "recipientWallet": {
+      "balance": { "available": 0, "locked": 0 },
+      "accountType": "mainaccount",
+      "walletType": "local",
+      "status": "active",
+      "name": "NGN",
+      "symbol": "NGN"
+    },
+    "transferType": "internal",
+    "note": "PAYXXXXXXXX",
+    "exchangeRates": [
+      {
+        "symbol": "USDT",
+        "price": 1.0002,
+        "margin": 0,
+        "last_updated": "2026-03-12T13:40:01.107Z"
+      },
+      {
+        "symbol": "NGN",
+        "price": 0.00073,
+        "margin": 0,
+        "last_updated": "2026-03-12T13:40:01.982Z"
+      }
+    ]
+  }
+}
+```
+
+**Handler Example:**
+
+```typescript
+function handleInternalWithdrawal(payload: InternalTransferWithdrawalWebhook) {
+  const { transactionId, amount, currency, from, to, status, metadata } =
+    payload;
+
+  console.log(`Internal withdrawal processed`);
+  console.log(`Transaction ID: ${transactionId}`);
+  console.log(`Amount: ${currency} ${amount} from wallet ${from} → ${to}`);
+  console.log(`Status: ${status}`);
+
+  if (metadata.note) {
+    console.log(`Note: ${metadata.note}`);
+  }
+
+  // Log or update your records accordingly
+}
+```
+
+---
+
+### 4. Internal Transfer Deposit
+
+Triggered when funds arrive in your wallet from another internal 100Pay wallet.
+
+**Type Definition:**
+
+```typescript
+interface InternalTransferDepositWebhook {
+  eventType: "wallet.deposit.internal"; // 👈 Identifies the event
+  transactionHash: string;
+  status: "successful" | "pending" | "failed";
+  amount: string;
+  category: string;
+  _id: string;
+  transactionSignature: string;
+  from: string;
+  symbol: string;
+  to: string;
+  type: "credit"; // 👈 Transaction direction
+  transferType: "internal"; // 👈 Confirms internal transfer
+  note?: string;
+  network?: string;
+  timestamp: string;
+  accountId: string;
+  appId: string;
+  userId: string;
+}
+```
+
+**Example Payload:**
+
+```json
+{
+  "eventType": "wallet.deposit.internal",
+  "transactionHash": "internal-transfer-txn_0000000000000000000000",
+  "status": "successful",
+  "amount": "500",
+  "category": "uncategorized",
+  "_id": "txn_0000000000000000000000",
+  "transactionSignature": "internal-transfer-txn_0000000000000000000000-credit-625988-916698",
+  "from": "916698",
+  "symbol": "NGN",
+  "to": "625988",
+  "type": "credit",
+  "transferType": "internal",
+  "note": "Hello there!",
+  "network": "bsc",
+  "timestamp": "2026-03-12T13:32:35.200Z",
+  "accountId": "acc_0000000000000000000000",
+  "appId": "app_0000000000000000000000",
+  "userId": "user_0000000000000000000000"
+}
+```
+
+**Handler Example:**
+
+```typescript
+function handleInternalDeposit(payload: InternalTransferDepositWebhook) {
+  const { amount, symbol, from, to, status, note, timestamp } = payload;
+
+  console.log(`Internal deposit received`);
+  console.log(`Amount: ${symbol} ${amount} from wallet ${from} → ${to}`);
+  console.log(`Status: ${status}`);
+  console.log(`Time: ${timestamp}`);
+
+  if (note) {
+    console.log(`Message from sender: "${note}"`);
+  }
+
+  // Credit the recipient's account balance in your system
+}
+```
+
+---
+
+### Common Webhook Event Types
+
+| Event Type                | Direction | Description                                    |
+| ------------------------- | --------- | ---------------------------------------------- |
+| `bank_transfer.debit`     | Outgoing  | Bank transfer sent to an external bank account |
+| `bank_transfer.credit`    | Incoming  | Bank transfer received from an external source |
+| `wallet.deposit`          | Incoming  | Wallet deposit received (external/crypto)      |
+| `wallet.deposit.internal` | Incoming  | Internal wallet deposit received               |
+| `transaction.withdrawal`  | Outgoing  | Internal wallet withdrawal sent                |
+
+> **Security Note:** Always verify webhook authenticity and use the SDK's `verify()` method to confirm transaction details before updating your system.
+
+```typescript
+// Always verify the transaction after receiving a webhook
+async function onWebhookReceived(payload: any) {
+  if (payload.data?.transaction_id || payload.transactionId) {
+    const txId = payload.data?.transaction_id || payload.transactionId;
+    const verified = await client.verify(txId);
+
+    if (verified.status !== "success") {
+      console.warn("Transaction verification failed — ignoring webhook");
+      return;
+    }
+  }
+
+  // Safe to process
+}
+```
 
 > **Note:** Refer to the [100Pay API documentation](https://documenter.getpostman.com/view/13045730/2s93RMUatE) for a complete list of webhook events and their payloads.
-
-Always verify webhook signatures and use the SDK's `verify()` method to confirm transaction details.
 
 ## Resources
 
