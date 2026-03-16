@@ -275,7 +275,7 @@ export class Pay100 {
     ): Promise<CurrencyConversionResult | EnhancedConversionResponse> => {
       return this.request<
         CurrencyConversionResult | EnhancedConversionResponse
-      >("POST", "/api/v1/user/preview-convert-asset", {
+      >("POST", "/api/v1/user/convert-asset-preview", {
         ...data,
         ...(data.fromSymbol && {
           from_symbol: data.fromSymbol,
