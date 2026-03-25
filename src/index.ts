@@ -142,7 +142,7 @@ export class Pay100 {
    * @returns Object containing all necessary HTTP headers
    */
   private getHeaders(
-    payload: Record<string, unknown> = {},
+    payload: Record<string, unknown> = {}
   ): Record<string, string> {
     // Generate authentication headers if secret key is available (server-side mode)
     if (this.secretKey) {
@@ -180,7 +180,7 @@ export class Pay100 {
           method: "POST",
           headers: this.getHeaders(payload),
           body: JSON.stringify(payload),
-        },
+        }
       );
 
       // Parse response data
@@ -228,7 +228,7 @@ export class Pay100 {
     } catch (error) {
       // Handle errors with appropriate message
       throw new PaymentVerificationError(
-        error instanceof Error ? error.message : "An unknown error occurred",
+        error instanceof Error ? error.message : "An unknown error occurred"
       );
     }
   };
@@ -246,14 +246,14 @@ export class Pay100 {
      * @throws Error if the request fails or returns invalid data
      */
     create: async (
-      data: CreateSubAccountData,
+      data: CreateSubAccountData
     ): Promise<CreateSubAccountResponse> => {
       // Make sure the networks are lowercase
       data.networks = data.networks.map((network) => network.toLowerCase());
       return this.request<CreateSubAccountResponse>(
         "POST",
         "/api/v1/assets/subaccount/create",
-        data,
+        data
       );
     },
   };
@@ -271,7 +271,7 @@ export class Pay100 {
      * @throws Error if the request fails or returns invalid data
      */
     preview: async (
-      data: CurrencyConversionPayload,
+      data: CurrencyConversionPayload
     ): Promise<CurrencyConversionResult | EnhancedConversionResponse> => {
       return this.request<
         CurrencyConversionResult | EnhancedConversionResponse
@@ -300,14 +300,14 @@ export class Pay100 {
      * @throws Error if the transfer fails due to validation, insufficient funds, or other issues
      */
     executeTransfer: async (
-      data: ITransferAssetData,
+      data: ITransferAssetData
     ): Promise<ITransferAssetResponse> => {
       const { oauthAccessToken, ...transferData } = data;
       return this.request<ITransferAssetResponse>(
         "POST",
         "/api/v1/transfer/asset",
         transferData,
-        oauthAccessToken ? { Authorization: `Bearer ${oauthAccessToken}` } : {},
+        oauthAccessToken ? { Authorization: `Bearer ${oauthAccessToken}` } : {}
       );
     },
 
@@ -319,12 +319,12 @@ export class Pay100 {
      * @throws Error if the request fails or authentication is invalid
      */
     getHistory: async (
-      params: ITransferHistoryParams,
+      params: ITransferHistoryParams
     ): Promise<ITransferHistoryResponse> => {
       return this.request<ITransferHistoryResponse>(
         "GET",
         "/api/v1/transfer/history",
-        params,
+        params
       );
     },
 
@@ -336,12 +336,12 @@ export class Pay100 {
      * @throws Error if the fee calculation fails or currency is not supported
      */
     calculateFee: async (
-      params: ITransferFeeParams,
+      params: ITransferFeeParams
     ): Promise<ITransferFeeResponse> => {
       return this.request<ITransferFeeResponse>(
         "GET",
         "/api/v1/transfer/fee",
-        params,
+        params
       );
     },
   };
@@ -360,7 +360,7 @@ export class Pay100 {
     getSupportedWallets: async (): Promise<ISupportedWalletResponse> => {
       return this.request<ISupportedWalletResponse>(
         "GET",
-        "/api/v1/wallet/supported",
+        "/api/v1/wallet/supported"
       );
     },
 
@@ -372,12 +372,12 @@ export class Pay100 {
      * @throws Error if the request fails or authentication is invalid
      */
     getBalance: async (
-      params: IWalletBalanceParams = {},
+      params: IWalletBalanceParams = {}
     ): Promise<IWalletBalanceResponse> => {
       return this.request<IWalletBalanceResponse>(
         "GET",
         "/api/v1/wallets/balance",
-        params as Record<string, unknown>,
+        params as Record<string, unknown>
       );
     },
   };
@@ -395,7 +395,7 @@ export class Pay100 {
     getBankList: async (): Promise<IBankListResponse> => {
       return this.request<IBankListResponse>(
         "GET",
-        "/api/v1/bank-transfers/banks",
+        "/api/v1/bank-transfers/banks"
       );
     },
 
@@ -409,7 +409,7 @@ export class Pay100 {
       return this.request<IVerifyBankResponse>(
         "POST",
         "/api/v1/bank-transfers/verify-account",
-        data,
+        data
       );
     },
 
@@ -420,12 +420,12 @@ export class Pay100 {
      * @throws Error if the request fails or authentication is invalid
      */
     transfer: async (
-      data: IBankTransferData,
+      data: IBankTransferData
     ): Promise<IBankTransferResponse> => {
       return this.request<IBankTransferResponse>(
         "POST",
         "/api/v1/bank-transfers",
-        data,
+        data
       );
     },
   };
@@ -459,6 +459,7 @@ export class Pay100 {
       redirect_uri: string;
       scope?: string;
       state?: string;
+      origin?: string;
     }): Promise<string> => {
       const response = await this.request<{
         data: { authorizationUrl: string };
@@ -481,7 +482,7 @@ export class Pay100 {
       return this.request<IApiResponse<ITokenData>>(
         "POST",
         "/api/v1/oauth/token",
-        data,
+        data
       );
     },
 
@@ -491,13 +492,13 @@ export class Pay100 {
      * @returns Promise resolving to the user information.
      */
     getUserInfo: async (
-      accessToken: string,
+      accessToken: string
     ): Promise<IApiResponse<IUserInfo>> => {
       return this.request<IApiResponse<IUserInfo>>(
         "GET",
         "/api/v1/oauth/userinfo",
         {},
-        { Authorization: `Bearer ${accessToken}` },
+        { Authorization: `Bearer ${accessToken}` }
       );
     },
 
@@ -507,13 +508,13 @@ export class Pay100 {
      * @returns Promise resolving to the application information.
      */
     getAppInfo: async (
-      accessToken: string,
+      accessToken: string
     ): Promise<IApiResponse<IAppInfo>> => {
       return this.request<IApiResponse<IAppInfo>>(
         "GET",
         "/api/v1/oauth/appinfo",
         {},
-        { Authorization: `Bearer ${accessToken}` },
+        { Authorization: `Bearer ${accessToken}` }
       );
     },
 
@@ -540,14 +541,14 @@ export class Pay100 {
     method: "GET" | "POST" | "PUT" | "DELETE",
     endpoint: string,
     data: Record<string, unknown> = {},
-    customHeaders: Record<string, string> = {},
+    customHeaders: Record<string, string> = {}
   ): Promise<T> {
     try {
       // Build URL with query parameters for GET requests
       const url =
         method === "GET" && Object.keys(data).length > 0
           ? `${this.baseUrl}${endpoint}?${new URLSearchParams(
-              data as Record<string, string>,
+              data as Record<string, string>
             )}`
           : `${this.baseUrl}${endpoint}`;
 
