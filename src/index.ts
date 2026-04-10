@@ -27,7 +27,13 @@ import {
   ITransferFeeParams,
   ITransferFeeResponse,
 } from "./types/transfer";
-import { IAppInfo, IOAuthApp, ITokenData, IUserInfo } from "./types/oauth";
+import {
+  IAppInfo,
+  IAuthorizationUrlParams,
+  IOAuthApp,
+  ITokenData,
+  IUserInfo,
+} from "./types/oauth";
 import { logger } from "@untools/logger";
 
 export interface IApiResponse<T = unknown> {
@@ -454,13 +460,9 @@ export class Pay100 {
      * @param params - Authorization parameters.
      * @returns Promise resolving to the authorization URL.
      */
-    getAuthorizationUrl: async (params: {
-      client_id: string;
-      redirect_uri: string;
-      scope?: string;
-      state?: string;
-      origin?: string;
-    }): Promise<string> => {
+    getAuthorizationUrl: async (
+      params: IAuthorizationUrlParams
+    ): Promise<string> => {
       const response = await this.request<{
         data: { authorizationUrl: string };
       }>("GET", "/api/v1/oauth/authorize", params);

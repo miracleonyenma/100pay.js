@@ -8,6 +8,14 @@ export interface IOAuthApp {
   allowedScopes: string[];
 }
 
+export interface IAuthorizationUrlParams extends Record<string, unknown> {
+  client_id: string;
+  redirect_uri: string;
+  scope?: string;
+  state?: string;
+  origin?: string;
+}
+
 export interface ITokenData {
   access_token: string;
   token_type: string;
