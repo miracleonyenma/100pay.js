@@ -1,6 +1,6 @@
 {
   "name": "@100pay-hq/100pay.js",
-  "version": "1.5.8",
+  "version": "1.5.9",
   "description": "100Pay.js is the official Nodejs API wrapper SDK that lets you easily verify crypto payments, run bulk payout, transfer assets and many more.",
   "type": "module",
   "main": "./dist/index.cjs",
