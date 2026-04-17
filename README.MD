@@ -13,6 +13,7 @@ A TypeScript library for integrating with the 100Pay payment platform, enabling 
   - [Subaccounts](#subaccounts)
   - [Currency Conversion](#currency-conversion)
   - [Asset Transfers](#asset-transfers)
+    - [Multi-Wallet Waterfall Transfers](#multi-wallet-waterfall-transfers)
   - [Wallet Operations](#wallet-operations)
   - [Bank Transfers](#bank-transfers)
   - [OAuth 2.0 Authorization](#oauth-20-authorization)
@@ -24,6 +25,7 @@ A TypeScript library for integrating with the 100Pay payment platform, enabling 
   - [Accepting Cryptocurrency Payments](#accepting-cryptocurrency-payments)
   - [Creating Subaccounts for Partners or Marketplaces](#creating-subaccounts-for-partners-or-marketplaces)
   - [Currency Conversion Preview](#currency-conversion-preview)
+  - [Multi-Wallet Waterfall Transfer](#multi-wallet-waterfall-transfer)
   - [Bank Transfer Workflow](#bank-transfer-workflow)
   - [OAuth 2.0 Workflow](#oauth-20-workflow)
 - [Webhook Handling](#webhook-handling)
@@ -39,6 +41,7 @@ A TypeScript library for integrating with the 100Pay payment platform, enabling 
 - ✅ Create and manage subaccounts
 - ✅ Preview currency conversions
 - ✅ Transfer assets between wallets
+- ✅ Multi-wallet waterfall transfers (combine balances across currencies)
 - ✅ Get supported wallets
 - ✅ Bank transfers with account verification
 - ✅ OAuth 2.0 for secure authorization
@@ -360,7 +363,7 @@ try {
 Transfer assets between wallets and manage transfer operations:
 
 ```typescript
-// Execute an asset transfer
+// Standard single-wallet transfer
 const transfer = await client.transfer.executeTransfer({
   amount: 100,
   symbol: "USDT",
@@ -368,6 +371,21 @@ const transfer = await client.transfer.executeTransfer({
   transferType: "external",
   note: "Payment for services",
   oauthAccessToken: "your_oauth_token", // Optional: for OAuth 2.0 authentication
+});
+
+// Multi-wallet waterfall transfer
+// Combines balances from multiple wallets to meet the requested amount
+const multiTransfer = await client.transfer.executeTransfer({
+  amount: 10,
+  symbol: "NGN",
+  to: "297080",
+  from: "625988",
+  transferType: "internal",
+  note: "Payment for services",
+  multiWallet: true,
+  walletOrder: ["USDC", "NGN"], // Debit USDC first, then NGN
+  wallets: ["USDC", "NGN"],     // Wallets to draw from
+  minBalances: { NGN: 100 },    // Keep at least 100 NGN in the NGN wallet
 });
 
 // Get transfer history
@@ -391,14 +409,25 @@ const fees = await client.transfer.calculateFee({
 
 ```typescript
 interface ITransferAssetData {
-  amount: number | string; // Amount to transfer (must be greater than zero)
-  symbol: string; // Asset symbol/currency code
-  to: string; // Destination address or account identifier
-  transferType?: "internal" | "external"; // Type of transfer
-  note?: string; // Optional note or memo
-  oauthAccessToken?: string; // Optional OAuth 2.0 access token
+  amount: number | string;              // Amount to transfer (must be greater than zero)
+  symbol: string;                       // Target asset symbol/currency code
+  to: string;                           // Destination address, payid, or referral code
+  from?: string;                        // Source wallet address (for external transfers)
+  transferType?: "internal" | "external"; // Type of transfer (default: "external")
+  note?: string;                        // Optional note or memo
+  oauthAccessToken?: string;            // Optional OAuth 2.0 access token
+
+  // ── Multi-wallet waterfall options ──────────────────────────────────────
+  multiWallet?: boolean;                // Enable waterfall mode (default: false)
+  walletOrder?: string[];               // Priority order for debiting wallets
+  wallets?: string[];                   // Wallet pool to draw from (defaults to all withdrawable wallets)
+  minBalances?: Record<string, number>; // Floor balances to preserve per wallet
 }
 ```
+
+> **Multi-wallet mode** debits wallets in the order specified by `walletOrder`, automatically converting non-primary currency balances to the target `symbol` as needed. If `walletOrder` is omitted the target currency wallet is tried first.
+
+#### Multi-Wallet Waterfall Transfers
 
 **Transfer Response:**
 
@@ -407,9 +436,23 @@ interface ITransferAssetResponse {
   statusCode: number;
   message: string;
   data: {
-    receipt: string; // Transaction receipt/confirmation
-    transactionId: string; // Unique transaction identifier
-    timestamp: string | number; // Transaction timestamp
+    receipt: string;             // Transaction receipt/confirmation
+    transactionId: string;       // Unique transaction identifier
+    timestamp: string | number;  // Transaction timestamp
+    multiWallet?: true;          // Present when multi-wallet mode was used
+    withdrawalAnalysis?: {       // Only present for multi-wallet transfers
+      sufficientFunds: boolean;
+      totalAvailable: number;    // Total available in requested currency
+      requestedAmount: number;
+      requestedCurrency: string;
+      withdrawalPlan: Array<{
+        symbol: string;                   // Source wallet currency
+        walletId: string;
+        amountInWalletCurrency: number;   // Amount debited in source currency
+        amountInRequestedCurrency: number; // Equivalent in target currency
+        conversionRate: number;
+      }>;
+    };
   };
 }
 ```
@@ -891,6 +934,43 @@ if ("convertedAmount" in preview) {
   console.log("Enhanced conversion preview:", preview);
 }
 ```
+
+### Multi-Wallet Waterfall Transfer
+
+When a single wallet may not have sufficient balance, enable `multiWallet` mode to automatically combine balances from multiple wallets:
+
+```typescript
+// Scenario: user has 5 USDC and 200 NGN, and needs to send 10 NGN.
+// Use USDC first (converted), top up with NGN if needed.
+const result = await client.transfer.executeTransfer({
+  amount: 10,
+  symbol: "NGN",
+  to: "recipient-payid",
+  from: "sender-payid",
+  transferType: "internal",
+  multiWallet: true,
+  walletOrder: ["USDC", "NGN"], // Prefer USDC; fall back to NGN
+  wallets: ["USDC", "NGN"],
+  minBalances: { NGN: 100 },    // Never dip below 100 NGN
+});
+
+if (result.data.multiWallet) {
+  const { withdrawalPlan, totalAvailable } = result.data.withdrawalAnalysis!;
+  console.log(`Funded from ${withdrawalPlan.length} wallet(s):`);
+  withdrawalPlan.forEach((entry) => {
+    console.log(
+      `  ${entry.symbol}: ${entry.amountInWalletCurrency} → ${entry.amountInRequestedCurrency} NGN (rate: ${entry.conversionRate})`
+    );
+  });
+}
+```
+
+**How it works:**
+
+1. Balances from the listed `wallets` are fetched and any `minBalances` floors are subtracted.
+2. Remaining balances are converted to the target `symbol` using live exchange rates.
+3. Wallets are debited in `walletOrder` priority until the requested `amount` is covered.
+4. Cross-currency legs are recorded as conversion transactions before the final transfer.
 
 ### Bank Transfer Workflow
 
