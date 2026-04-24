@@ -565,10 +565,12 @@ export class Pay100 {
 
       // Handle response.ok check and throw errors for failed requests
       if (!response.ok) {
-        const errorData: unknown = await response.json().catch(() => ({}));
+        const errorData: unknown = await this.parseErrorResponse(response);
         logger.error(errorData);
         const errorMessage = this.extractErrorMessage(errorData);
-        throw new Error(`API Request Failed: ${errorMessage}`);
+        throw new Error(
+          `API Request Failed (${response.status}): ${errorMessage}`
+        );
       }
 
       // Parse JSON response
@@ -599,6 +601,26 @@ export class Pay100 {
   }
 
   /**
+   * Safely parses error responses, including non-JSON payloads.
+   */
+  private async parseErrorResponse(response: Response): Promise<unknown> {
+    const rawBody = await response.text().catch(() => "");
+
+    if (!rawBody) {
+      return {
+        status: response.status,
+        statusText: response.statusText,
+      };
+    }
+
+    try {
+      return JSON.parse(rawBody);
+    } catch {
+      return rawBody;
+    }
+  }
+
+  /**
    * Extracts error message from various response data structures
    *
    * @param data - The response data object which may contain error information
@@ -621,6 +643,15 @@ export class Pay100 {
     // Direct error message in data.message
     if ("message" in dataObj && typeof dataObj.message === "string") {
       return dataObj.message;
+    }
+
+    // Alternative common message fields
+    if ("reason" in dataObj && typeof dataObj.reason === "string") {
+      return dataObj.reason;
+    }
+
+    if ("detail" in dataObj && typeof dataObj.detail === "string") {
+      return dataObj.detail;
     }
 
     // Error object with message property
@@ -673,6 +704,17 @@ export class Pay100 {
     // If we have a statusText from the response, use that
     if ("statusText" in dataObj && typeof dataObj.statusText === "string") {
       return dataObj.statusText;
+    }
+
+    // Generic fallback: return all string values from the error payload.
+    // This captures payloads like { "arg_0": "Phone number is required" }.
+    const stringValues = Object.values(dataObj).filter(
+      (value): value is string =>
+        typeof value === "string" && value.trim() !== ""
+    );
+
+    if (stringValues.length > 0) {
+      return stringValues.join("; ");
     }
 
     // Stringify the error if nothing else works
