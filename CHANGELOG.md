@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [1.5.12](https://github.com/shop100global/100pay.js/compare/v1.5.11...v1.5.12) (2026-06-16)
+
+
+### Features
+
+* enhance error message extraction in Pay100 class for improved clarity ([373f809](https://github.com/shop100global/100pay.js/commit/373f8096eeb56143ac1c5f8f293712a5cea380f2))
+
 ## [1.5.0](https://github.com/shop100global/100pay.js/compare/v1.4.17...v1.5.0) (2025-11-08)
 
 
