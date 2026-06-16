@@ -667,6 +667,20 @@ export class Pay100 {
       if (error && typeof error === "object") {
         const errorObj = error as Record<string, unknown>;
 
+        // Prefer detailed error messages from details.errors array
+        if ("details" in errorObj && errorObj.details && typeof errorObj.details === "object") {
+          const details = errorObj.details as Record<string, unknown>;
+          if (
+            "errors" in details &&
+            Array.isArray(details.errors) &&
+            details.errors.length > 0
+          ) {
+            return (details.errors as unknown[])
+              .filter((e) => typeof e === "string")
+              .join("; ") || (typeof errorObj.message === "string" ? errorObj.message : "Unknown error");
+          }
+        }
+
         if ("message" in errorObj && typeof errorObj.message === "string") {
           return errorObj.message;
         }
