@@ -30,6 +30,7 @@
     "build": "tsup",
     "build:clean": "rm -rf dist && tsup",
     "type-check": "tsc --noEmit",
+    "test:customers": "npm run build && node scripts/test-customers-sdk.mjs",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "verify": "npm run lint && npm run build",

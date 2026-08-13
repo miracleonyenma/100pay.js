@@ -6,3 +6,4 @@ export * from "./transfer";
 export * from "./wallet";
 export * from "./oauth";
 export * from "./webhook";
+export * from "./customer";

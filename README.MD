@@ -10,6 +10,7 @@ A TypeScript library for integrating with the 100Pay payment platform, enabling 
 - [API Reference](#api-reference)
   - [Initialization](#initialization)
   - [Transaction Verification](#transaction-verification)
+  - [Customer Operations](#customer-operations)
   - [Subaccounts](#subaccounts)
   - [Currency Conversion](#currency-conversion)
   - [Asset Transfers](#asset-transfers)
@@ -38,6 +39,7 @@ A TypeScript library for integrating with the 100Pay payment platform, enabling 
 ## Features
 
 - ✅ Verify cryptocurrency payments
+- ✅ Create and manage customers with typed ETag-safe lifecycle operations
 - ✅ Create and manage subaccounts
 - ✅ Preview currency conversions
 - ✅ Transfer assets between wallets
@@ -147,6 +149,55 @@ try {
   }
 }
 ```
+
+### Customer Operations
+
+The `customer` namespace manages merchant customers. It requires a secret API
+key and uses idempotency keys for every write. Create/get/update responses expose
+the resource ETag as `response.etag`; pass it as `ifMatch` on guarded writes.
+
+```typescript
+import { randomUUID } from "node:crypto";
+
+const created = await client.customer.create(
+  {
+    externalReference: "user-8f2c1a",
+    firstName: "Ada",
+    lastName: "Obi",
+    email: "ada@example.com",
+  },
+  { idempotencyKey: randomUUID() }
+);
+
+const updated = await client.customer.update(
+  created.data.id,
+  { displayName: "Ada O." },
+  {
+    idempotencyKey: randomUUID(),
+    ifMatch: created.etag!,
+  }
+);
+
+const suspended = await client.customer.suspend(
+  updated.data.id,
+  { reason: "Temporary merchant risk review" },
+  {
+    idempotencyKey: randomUUID(),
+    ifMatch: updated.etag!,
+  }
+);
+
+const customers = await client.customer.list({
+  page: 1,
+  limit: 20,
+  status: "active",
+  sort: "createdAt:desc",
+});
+```
+
+Available commands are `create`, `list`, `get`, `update`, `delete`, `restore`,
+`suspend`, `resume`, `restrict`, and `unrestrict`. Public API keys are not
+accepted for customer operations.
 
 ### Subaccounts
 

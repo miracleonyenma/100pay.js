@@ -34,6 +34,19 @@ import {
   ITokenData,
   IUserInfo,
 } from "./types/oauth";
+import {
+  IConditionalCustomerWriteOptions,
+  ICreateCustomerData,
+  ICustomerLifecycleCommandData,
+  ICustomerLifecycleResponse,
+  ICustomerListResponse,
+  ICustomerResponse,
+  IDeleteCustomerData,
+  IIdempotentRequestOptions,
+  IListCustomersParams,
+  IUpdateCustomerResponse,
+  IUpdateCustomerData,
+} from "./types/customer";
 import { logger } from "@untools/logger";
 
 export interface IApiResponse<T = unknown> {
@@ -262,6 +275,117 @@ export class Pay100 {
         data
       );
     },
+  };
+
+  /** Public customer CRUD and merchant lifecycle operations. */
+  customer = {
+    create: async (
+      data: ICreateCustomerData,
+      options: IIdempotentRequestOptions
+    ): Promise<ICustomerResponse> =>
+      this.request<ICustomerResponse>(
+        "POST",
+        "/api/v1/customers",
+        data,
+        { "Idempotency-Key": options.idempotencyKey },
+        this.withEtag
+      ),
+
+    list: async (
+      params: IListCustomersParams = {}
+    ): Promise<ICustomerListResponse> => {
+      const query = Object.fromEntries(
+        Object.entries(params).filter(([, value]) => value !== undefined)
+      );
+      return this.request<ICustomerListResponse>(
+        "GET",
+        "/api/v1/customers",
+        query
+      );
+    },
+
+    get: async (customerId: string): Promise<ICustomerResponse> =>
+      this.request<ICustomerResponse>(
+        "GET",
+        `/api/v1/customers/${encodeURIComponent(customerId)}`,
+        {},
+        {},
+        this.withEtag
+      ),
+
+    update: async (
+      customerId: string,
+      data: IUpdateCustomerData,
+      options: IConditionalCustomerWriteOptions
+    ): Promise<IUpdateCustomerResponse> =>
+      this.request<IUpdateCustomerResponse>(
+        "PATCH",
+        `/api/v1/customers/${encodeURIComponent(customerId)}`,
+        data,
+        {
+          "Idempotency-Key": options.idempotencyKey,
+          "If-Match": options.ifMatch,
+        },
+        this.withEtag
+      ),
+
+    delete: async (
+      customerId: string,
+      data: IDeleteCustomerData,
+      options: IConditionalCustomerWriteOptions
+    ): Promise<void> =>
+      this.request<void>(
+        "DELETE",
+        `/api/v1/customers/${encodeURIComponent(customerId)}`,
+        data,
+        {
+          "Idempotency-Key": options.idempotencyKey,
+          "If-Match": options.ifMatch,
+        }
+      ),
+
+    restore: async (
+      customerId: string,
+      options: IConditionalCustomerWriteOptions
+    ): Promise<ICustomerResponse> =>
+      this.request<ICustomerResponse>(
+        "POST",
+        `/api/v1/customers/${encodeURIComponent(customerId)}/restore`,
+        {},
+        {
+          "Idempotency-Key": options.idempotencyKey,
+          "If-Match": options.ifMatch,
+        },
+        this.withEtag
+      ),
+
+    suspend: async (
+      customerId: string,
+      data: ICustomerLifecycleCommandData,
+      options: IConditionalCustomerWriteOptions
+    ): Promise<ICustomerLifecycleResponse> =>
+      this.customerLifecycleCommand(customerId, "suspend", data, options),
+
+    resume: async (
+      customerId: string,
+      data: ICustomerLifecycleCommandData,
+      options: IConditionalCustomerWriteOptions
+    ): Promise<ICustomerLifecycleResponse> =>
+      this.customerLifecycleCommand(customerId, "resume", data, options),
+
+    restrict: async (
+      customerId: string,
+      data: ICustomerLifecycleCommandData,
+      options: IConditionalCustomerWriteOptions
+    ): Promise<ICustomerLifecycleResponse> =>
+      this.customerLifecycleCommand(customerId, "restrict", data, options),
+
+    unrestrict: async (
+      customerId: string,
+      data: ICustomerLifecycleCommandData,
+      options: IConditionalCustomerWriteOptions
+    ): Promise<ICustomerLifecycleResponse> =>
+      this.customerLifecycleCommand(customerId, "unrestrict", data, options),
   };
 
   /**
@@ -540,10 +664,11 @@ export class Pay100 {
    * @throws Error with detailed message on request failure
    */
   async request<T>(
-    method: "GET" | "POST" | "PUT" | "DELETE",
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     endpoint: string,
     data: Record<string, unknown> = {},
-    customHeaders: Record<string, string> = {}
+    customHeaders: Record<string, string> = {},
+    transform?: (data: T, response: Response) => T
   ): Promise<T> {
     try {
       // Build URL with query parameters for GET requests
@@ -560,7 +685,26 @@ export class Pay100 {
         headers: { ...headers, ...customHeaders },
         body: method !== "GET" ? JSON.stringify(data) : undefined,
       };
-      logger?.debug(`Request to ${url}`, { options });
+      const sensitiveHeaders = new Set([
+        "api-key",
+        "x-api-key",
+        "x-secret-key",
+        "authorization",
+        "x-signature",
+        "idempotency-key",
+      ]);
+      const loggedHeaders = Object.fromEntries(
+        Object.entries(options.headers).map(([name, value]) => [
+          name,
+          sensitiveHeaders.has(name.toLowerCase()) ? "<redacted>" : value,
+        ])
+      );
+      const loggedUrl = url.split("?", 1)[0];
+      logger?.debug(`Request to ${loggedUrl}`, {
+        method,
+        headers: loggedHeaders,
+        hasBody: options.body !== undefined,
+      });
       const response = await fetch(url, options);
 
       // Handle response.ok check and throw errors for failed requests
@@ -571,6 +715,10 @@ export class Pay100 {
         throw new Error(
           `API Request Failed (${response.status}): ${errorMessage}`
         );
+      }
+
+      if (response.status === 204) {
+        return undefined as T;
       }
 
       // Parse JSON response
@@ -589,7 +737,8 @@ export class Pay100 {
         }
       }
 
-      return responseData as T;
+      const typedResponse = responseData as T;
+      return transform ? transform(typedResponse, response) : typedResponse;
     } catch (error) {
       if (error instanceof Error) {
         throw error;
@@ -599,6 +748,26 @@ export class Pay100 {
       throw new Error(`API Request Failed: ${String(error)}`);
     }
   }
+
+  private withEtag = <T extends object>(data: T, response: Response): T =>
+    ({ ...data, etag: response.headers.get("etag") } as T);
+
+  private customerLifecycleCommand = async (
+    customerId: string,
+    command: "suspend" | "resume" | "restrict" | "unrestrict",
+    data: ICustomerLifecycleCommandData,
+    options: IConditionalCustomerWriteOptions
+  ): Promise<ICustomerLifecycleResponse> =>
+    this.request<ICustomerLifecycleResponse>(
+      "POST",
+      `/api/v1/customers/${encodeURIComponent(customerId)}/${command}`,
+      data,
+      {
+        "Idempotency-Key": options.idempotencyKey,
+        "If-Match": options.ifMatch,
+      },
+      this.withEtag
+    );
 
   /**
    * Safely parses error responses, including non-JSON payloads.
