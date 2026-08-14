@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.6.0](https://github.com/shop100global/100pay.js/compare/v1.5.12...v1.6.0) (2026-08-14)
+
+
+### Features
+
+* add customer banking settings and withdrawal status management to Pay100 SDK ([69c5172](https://github.com/shop100global/100pay.js/commit/69c517215113a30b1b0d7eb5e1922fdda7f78c63))
+* add customer management operations and types to Pay100 SDK ([ca6b06d](https://github.com/shop100global/100pay.js/commit/ca6b06dc6e25cf50c981a744e8c0ce25f0a79c49))
+* add identity verification and virtual bank account management to Pay100 SDK ([a5b12ed](https://github.com/shop100global/100pay.js/commit/a5b12eddafeb202405b77dd20755e271f4139402))
+
 ### [1.5.12](https://github.com/shop100global/100pay.js/compare/v1.5.11...v1.5.12) (2026-06-16)
 
 
