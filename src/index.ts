@@ -36,6 +36,8 @@ import {
 } from "./types/oauth";
 import {
   IConditionalCustomerWriteOptions,
+  ICreateCustomerVerificationData,
+  ICreateCustomerVerificationResponse,
   ICreateCustomerData,
   ICustomerLifecycleCommandData,
   ICustomerLifecycleResponse,
@@ -44,6 +46,24 @@ import {
   IDeleteCustomerData,
   IIdempotentRequestOptions,
   IListCustomersParams,
+  IListCustomerVerificationsParams,
+  ICustomerVerificationListResponse,
+  ICustomerVerificationResponse,
+  ICreateCustomerVirtualBankAccountData,
+  IListCustomerVirtualBankAccountsParams,
+  ICustomerVirtualBankAccountListResponse,
+  ICustomerVirtualBankAccountResponse,
+  ICustomerWalletBalanceResponse,
+  IListCustomerWalletTransactionsParams,
+  ICustomerWalletTransactionListResponse,
+  ICreateCustomerWithdrawalData,
+  ICustomerWithdrawalResponse,
+  ICustomerWithdrawalPreflightData,
+  ICustomerWithdrawalPreflightResponse,
+  ICreateCustomerInternalTransferData,
+  ICustomerInternalTransferResponse,
+  ICustomerTransferLimitsResponse,
+  ISetCustomerTransferLimitsData,
   IUpdateCustomerResponse,
   IUpdateCustomerData,
 } from "./types/customer";
@@ -386,6 +406,238 @@ export class Pay100 {
       options: IConditionalCustomerWriteOptions
     ): Promise<ICustomerLifecycleResponse> =>
       this.customerLifecycleCommand(customerId, "unrestrict", data, options),
+
+    identityVerification: {
+      create: async (
+        customerId: string,
+        data: ICreateCustomerVerificationData,
+        options: IIdempotentRequestOptions
+      ): Promise<ICreateCustomerVerificationResponse> =>
+        this.request<ICreateCustomerVerificationResponse>(
+          "POST",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/identity-verifications`,
+          data,
+          { "Idempotency-Key": options.idempotencyKey },
+          this.withEtag
+        ),
+
+      list: async (
+        customerId: string,
+        params: IListCustomerVerificationsParams = {}
+      ): Promise<ICustomerVerificationListResponse> => {
+        const query = Object.fromEntries(
+          Object.entries(params)
+            .filter(([, value]) => value !== undefined)
+            .map(([key, value]) => [key, String(value)])
+        );
+        return this.request<ICustomerVerificationListResponse>(
+          "GET",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/identity-verifications`,
+          query
+        );
+      },
+
+      get: async (
+        customerId: string,
+        verificationId: string
+      ): Promise<ICustomerVerificationResponse> =>
+        this.request<ICustomerVerificationResponse>(
+          "GET",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/identity-verifications/${encodeURIComponent(verificationId)}`,
+          {},
+          {},
+          this.withEtag
+        ),
+
+    },
+
+    virtualBankAccount: {
+      create: async (
+        customerId: string,
+        data: ICreateCustomerVirtualBankAccountData,
+        options: IIdempotentRequestOptions
+      ): Promise<ICustomerVirtualBankAccountResponse> =>
+        this.request<ICustomerVirtualBankAccountResponse>(
+          "POST",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/virtual-bank-accounts`,
+          data,
+          { "Idempotency-Key": options.idempotencyKey },
+          this.withEtag
+        ),
+
+      list: async (
+        customerId: string,
+        params: IListCustomerVirtualBankAccountsParams = {}
+      ): Promise<ICustomerVirtualBankAccountListResponse> => {
+        const query = Object.fromEntries(
+          Object.entries(params)
+            .filter(([, value]) => value !== undefined)
+            .map(([key, value]) => [key, String(value)])
+        );
+        return this.request<ICustomerVirtualBankAccountListResponse>(
+          "GET",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/virtual-bank-accounts`,
+          query
+        );
+      },
+
+      get: async (
+        customerId: string,
+        virtualBankAccountId: string
+      ): Promise<ICustomerVirtualBankAccountResponse> =>
+        this.request<ICustomerVirtualBankAccountResponse>(
+          "GET",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/virtual-bank-accounts/${encodeURIComponent(
+            virtualBankAccountId
+          )}`,
+          {},
+          {},
+          this.withEtag
+        ),
+
+      retry: async (
+        customerId: string,
+        virtualBankAccountId: string,
+        options: IConditionalCustomerWriteOptions
+      ): Promise<ICustomerVirtualBankAccountResponse> =>
+        this.request<ICustomerVirtualBankAccountResponse>(
+          "POST",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/virtual-bank-accounts/${encodeURIComponent(
+            virtualBankAccountId
+          )}/retry`,
+          {},
+          {
+            "Idempotency-Key": options.idempotencyKey,
+            "If-Match": options.ifMatch,
+          },
+          this.withEtag
+        ),
+    },
+
+    wallet: {
+      getBalance: async (
+        customerId: string,
+        walletId: string
+      ): Promise<ICustomerWalletBalanceResponse> =>
+        this.request<ICustomerWalletBalanceResponse>(
+          "GET",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/wallets/${encodeURIComponent(walletId)}/balance`,
+          {},
+          {},
+          this.withEtag
+        ),
+
+      listTransactions: async (
+        customerId: string,
+        walletId: string,
+        params: IListCustomerWalletTransactionsParams = {}
+      ): Promise<ICustomerWalletTransactionListResponse> => {
+        const query = Object.fromEntries(
+          Object.entries(params)
+            .filter(([, value]) => value !== undefined)
+            .map(([key, value]) => [key, String(value)])
+        );
+        return this.request<ICustomerWalletTransactionListResponse>(
+          "GET",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/wallets/${encodeURIComponent(walletId)}/transactions`,
+          query
+        );
+      },
+
+      withdraw: async (
+        customerId: string,
+        walletId: string,
+        data: ICreateCustomerWithdrawalData,
+        options: IIdempotentRequestOptions
+      ): Promise<ICustomerWithdrawalResponse> =>
+        this.request<ICustomerWithdrawalResponse>(
+          "POST",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/wallets/${encodeURIComponent(walletId)}/withdrawals`,
+          data,
+          { "Idempotency-Key": options.idempotencyKey },
+          this.withEtag
+        ),
+
+      preflightWithdrawal: async (
+        customerId: string,
+        walletId: string,
+        data: ICustomerWithdrawalPreflightData
+      ): Promise<ICustomerWithdrawalPreflightResponse> =>
+        this.request<ICustomerWithdrawalPreflightResponse>(
+          "POST",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/wallets/${encodeURIComponent(walletId)}/withdrawals/preflight`,
+          data,
+          {},
+          this.withEtag
+        ),
+
+      transferToMerchant: async (
+        customerId: string,
+        walletId: string,
+        data: ICreateCustomerInternalTransferData,
+        options: IIdempotentRequestOptions
+      ): Promise<ICustomerInternalTransferResponse> =>
+        this.request<ICustomerInternalTransferResponse>(
+          "POST",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/wallets/${encodeURIComponent(walletId)}/transfers`,
+          data,
+          { "Idempotency-Key": options.idempotencyKey },
+          this.withEtag
+        ),
+    },
+
+    transferLimits: {
+      get: async (
+        customerId: string
+      ): Promise<ICustomerTransferLimitsResponse> =>
+        this.request<ICustomerTransferLimitsResponse>(
+          "GET",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/transfer-limits`,
+          {},
+          {},
+          this.withEtag
+        ),
+
+      set: async (
+        customerId: string,
+        data: ISetCustomerTransferLimitsData
+      ): Promise<ICustomerTransferLimitsResponse> =>
+        this.request<ICustomerTransferLimitsResponse>(
+          "PUT",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/transfer-limits`,
+          data,
+          {},
+          this.withEtag
+        ),
+    },
   };
 
   /**
