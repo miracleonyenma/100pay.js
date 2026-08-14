@@ -284,6 +284,11 @@ export interface ICreateCustomerVirtualBankAccountData
    * (platform settlement account unless configured otherwise).
    */
   sweepDestination?: CustomerVbaSweepDestination;
+  /**
+   * Who pays deposit processing fees. "merchant" sponsors from your main NGN
+   * wallet with customer fallback when your balance is insufficient.
+   */
+  depositFeeBearer?: "customer" | "merchant";
 }
 
 export interface IListCustomerVirtualBankAccountsParams
@@ -315,6 +320,8 @@ export interface ICustomerWalletBalance {
   customerId: string;
   currency: string;
   status: string;
+  /** true when the ledger is negative; outgoing transfers are blocked */
+  restricted: boolean;
   ledger: {
     available: number;
     total: number;
@@ -367,10 +374,32 @@ export interface ICustomerWalletTransactionListResponse {
 
 export interface ICreateCustomerWithdrawalData extends Record<string, unknown> {
   amount: number;
-  beneficiaryBankCode: string;
-  beneficiaryAccountNumber: string;
+  /** A saved app-scoped beneficiary ID; replaces bank code + account number */
+  beneficiaryId?: string;
+  beneficiaryBankCode?: string;
+  beneficiaryAccountNumber?: string;
+  /** Save this destination as an app-scoped beneficiary for reuse */
+  saveBeneficiary?: boolean;
   narration?: string;
   externalReference?: string;
+  /** Interactive dashboard sessions only; SK/OAuth callers must omit it */
+  transactionPin?: string;
+}
+
+export interface ICustomerWithdrawalBeneficiary {
+  id: string;
+  accountName: string | null;
+  accountNumber: string;
+  bankCode: string;
+  bankName: string | null;
+  createdAt: string;
+}
+
+export interface ICustomerBeneficiaryListResponse {
+  success: true;
+  message: string;
+  data: ICustomerWithdrawalBeneficiary[];
+  meta: { pagination: ICustomerPagination };
 }
 
 export interface ICustomerWithdrawal {
@@ -395,6 +424,31 @@ export interface ICustomerWithdrawalResponse {
   success: true;
   message: string;
   data: ICustomerWithdrawal;
+  etag: string | null;
+  meta?: Record<string, unknown>;
+}
+
+export interface ICustomerWithdrawalStatus {
+  reference: string | null;
+  transactionReference: string;
+  customerId: string;
+  walletId: string;
+  type: "bank_transfer";
+  status: "pending" | "successful" | "failed" | "reversed";
+  amount: string;
+  fee: string;
+  currency: string;
+  description: string | null;
+  /** true while the provider outcome has not been recorded yet */
+  processing: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ICustomerWithdrawalStatusResponse {
+  success: true;
+  message: string;
+  data: ICustomerWithdrawalStatus;
   etag: string | null;
   meta?: Record<string, unknown>;
 }
@@ -425,6 +479,7 @@ export interface ICustomerWithdrawalPreflight {
     | "below_minimum_amount"
     | "above_maximum_amount"
     | "daily_limit_exceeded"
+    | "negative_balance"
     | "insufficient_balance"
     | "customer_not_active"
   >;
@@ -444,6 +499,8 @@ export interface ICreateCustomerInternalTransferData
   destination: "merchant";
   amount: number;
   narration?: string;
+  /** Interactive dashboard sessions only; SK/OAuth callers must omit it */
+  transactionPin?: string;
 }
 
 export interface ICustomerInternalTransfer {
@@ -513,4 +570,34 @@ export interface ISetCustomerTransferLimitsData
     perTransactionMax?: number | null;
     rolling24hMax?: number | null;
   };
+}
+
+export interface ICustomerBankingSettings {
+  sweepDestination: CustomerVbaSweepDestination;
+  depositFeeBearer: "customer" | "merchant";
+  insufficientSponsorBehavior:
+    | "charge_customer"
+    | "create_merchant_receivable"
+    | "hold_customer_deposit";
+  /** Platform-set sponsored-fee exposure cap (read-only) */
+  receivableLimit: number;
+  version: number;
+}
+
+export interface ICustomerBankingSettingsResponse {
+  success: true;
+  message: string;
+  data: ICustomerBankingSettings;
+  etag: string | null;
+  meta?: Record<string, unknown>;
+}
+
+export interface IUpdateCustomerBankingSettingsData
+  extends Record<string, unknown> {
+  sweepDestination?: CustomerVbaSweepDestination;
+  depositFeeBearer?: "customer" | "merchant";
+  insufficientSponsorBehavior?:
+    | "charge_customer"
+    | "create_merchant_receivable"
+    | "hold_customer_deposit";
 }

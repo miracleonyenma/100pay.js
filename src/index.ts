@@ -58,12 +58,16 @@ import {
   ICustomerWalletTransactionListResponse,
   ICreateCustomerWithdrawalData,
   ICustomerWithdrawalResponse,
+  ICustomerWithdrawalStatusResponse,
   ICustomerWithdrawalPreflightData,
   ICustomerWithdrawalPreflightResponse,
   ICreateCustomerInternalTransferData,
   ICustomerInternalTransferResponse,
   ICustomerTransferLimitsResponse,
   ISetCustomerTransferLimitsData,
+  ICustomerBankingSettingsResponse,
+  IUpdateCustomerBankingSettingsData,
+  ICustomerBeneficiaryListResponse,
   IUpdateCustomerResponse,
   IUpdateCustomerData,
 } from "./types/customer";
@@ -593,6 +597,23 @@ export class Pay100 {
           this.withEtag
         ),
 
+      getWithdrawal: async (
+        customerId: string,
+        walletId: string,
+        reference: string
+      ): Promise<ICustomerWithdrawalStatusResponse> =>
+        this.request<ICustomerWithdrawalStatusResponse>(
+          "GET",
+          `/api/v1/customers/${encodeURIComponent(
+            customerId
+          )}/wallets/${encodeURIComponent(
+            walletId
+          )}/withdrawals/${encodeURIComponent(reference)}`,
+          {},
+          {},
+          this.withEtag
+        ),
+
       transferToMerchant: async (
         customerId: string,
         walletId: string,
@@ -637,6 +658,53 @@ export class Pay100 {
           {},
           this.withEtag
         ),
+    },
+
+    bankingSettings: {
+      get: async (): Promise<ICustomerBankingSettingsResponse> =>
+        this.request<ICustomerBankingSettingsResponse>(
+          "GET",
+          "/api/v1/customers/banking-settings",
+          {},
+          {},
+          this.withEtag
+        ),
+
+      update: async (
+        data: IUpdateCustomerBankingSettingsData,
+        options: { ifMatch: string }
+      ): Promise<ICustomerBankingSettingsResponse> =>
+        this.request<ICustomerBankingSettingsResponse>(
+          "PATCH",
+          "/api/v1/customers/banking-settings",
+          data,
+          { "If-Match": options.ifMatch },
+          this.withEtag
+        ),
+    },
+
+    beneficiaries: {
+      list: async (
+        params: { page?: number; limit?: number } = {}
+      ): Promise<ICustomerBeneficiaryListResponse> => {
+        const query = Object.fromEntries(
+          Object.entries(params)
+            .filter(([, value]) => value !== undefined)
+            .map(([key, value]) => [key, String(value)])
+        );
+        return this.request<ICustomerBeneficiaryListResponse>(
+          "GET",
+          "/api/v1/customers/beneficiaries",
+          query
+        );
+      },
+
+      delete: async (beneficiaryId: string): Promise<void> => {
+        await this.request<void>(
+          "DELETE",
+          `/api/v1/customers/beneficiaries/${encodeURIComponent(beneficiaryId)}`
+        );
+      },
     },
   };
 
