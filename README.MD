@@ -1130,6 +1130,25 @@ async function performOAuth() {
 
 100Pay sends webhooks for various events. Webhook payloads can be categorized into `bank_transfer`, `charge`, and `internal_transfer` events. Below are the type definitions and **real payload examples** for each event type, highlighting the **`type`**, **`eventType`**, and **`transferType`** fields where available.
 
+> **Full reference:** this section covers the most common events. The complete catalog — including `transaction.deposit`, `transaction.status.changed`, `reward.payout`, `wallet.deposit` (on-chain), `transaction_session.*`, and the 15 HMAC-signed `customer.*` events — lives in the [100Pay webhook docs](https://docs.100pay.co/docs/webhooks).
+
+### Verifying Webhooks
+
+Every webhook request includes a `verification-token` header carrying the secret configured for your endpoint in [Developer Settings](https://dashboard.100pay.co/developers). **Always verify it before processing.**
+
+Requests also carry delivery-tracking headers:
+
+| Header                     | Description                                                                 |
+| -------------------------- | --------------------------------------------------------------------------- |
+| `verification-token`       | Your endpoint's secret — compare against your stored value                  |
+| `x-100pay-event-type`      | Event type (`unknown` for legacy charge payloads)                            |
+| `x-100pay-event-ref`       | Stable resource reference (transaction ID, charge ID, …)                    |
+| `x-100pay-delivery-id`     | Unique per logical delivery, **stable across retries** — use for idempotency |
+| `idempotency-key`          | Same value as `x-100pay-delivery-id`                                         |
+| `x-100pay-attempt-number`  | `1` on first delivery, incremented on retries                               |
+
+Failed deliveries (non-`2xx` or >15s timeout) are retried after 1 minute, 5 minutes, and 30 minutes (4 attempts total), so make your handler idempotent using `x-100pay-delivery-id`.
+
 ### Setting Up a Webhook Handler
 
 ```typescript
@@ -1139,9 +1158,14 @@ const app = express();
 app.use(express.json());
 
 app.post("/webhooks/100pay", (req, res) => {
+  // 1. Verify the request is from 100Pay
+  if (req.headers["verification-token"] !== process.env.PAY100_VERIFICATION_TOKEN) {
+    return res.sendStatus(401);
+  }
+
   const payload = req.body;
 
-  // Route the event based on eventType or type
+  // 2. Route the event based on eventType or payload shape
   if (payload.eventType === "bank_transfer.debit") {
     handleBankTransferWithdrawal(payload);
   } else if (payload.eventType === "wallet.deposit.internal") {
@@ -1149,9 +1173,11 @@ app.post("/webhooks/100pay", (req, res) => {
   } else if (payload.eventType === "transaction.withdrawal") {
     handleInternalWithdrawal(payload);
   } else if (payload.type === "credit" && payload.chargeId) {
+    // Legacy payment charge payload — has no eventType field
     handlePaymentCharge(payload);
   }
 
+  // 3. Acknowledge fast — do heavy work asynchronously
   res.sendStatus(200);
 });
 ```
@@ -1581,13 +1607,21 @@ function handleInternalDeposit(payload: InternalTransferDepositWebhook) {
 
 ### Common Webhook Event Types
 
-| Event Type                | Direction | Description                                    |
-| ------------------------- | --------- | ---------------------------------------------- |
-| `bank_transfer.debit`     | Outgoing  | Bank transfer sent to an external bank account |
-| `bank_transfer.credit`    | Incoming  | Bank transfer received from an external source |
-| `wallet.deposit`          | Incoming  | Wallet deposit received (external/crypto)      |
-| `wallet.deposit.internal` | Incoming  | Internal wallet deposit received               |
-| `transaction.withdrawal`  | Outgoing  | Internal wallet withdrawal sent                |
+| Event Type                       | Direction | Description                                                                 |
+| -------------------------------- | --------- | ---------------------------------------------------------------------------- |
+| *(none — `chargeId` + `type: "credit"`)* | Incoming  | Payment received on a charge (checkout / payment link / API charge)  |
+| `bank_transfer.debit`            | Outgoing  | Bank transfer sent to an external bank account (fires per status transition) |
+| `bank_transfer.credit`           | Incoming  | Bank transfer received from an external source                               |
+| `wallet.deposit`                 | Incoming  | On-chain crypto deposit received at a wallet address                          |
+| `wallet.deposit.internal`        | Incoming  | Internal wallet deposit received                                              |
+| `transaction.deposit`            | Incoming  | Wallet credit transaction recorded                                            |
+| `transaction.withdrawal`         | Outgoing  | Wallet debit transaction recorded                                             |
+| `transaction.status.changed`     | —         | A transaction moved between statuses (e.g. `pending → successful`)           |
+| `reward.payout`                  | Incoming  | Reward paid out to a wallet                                                   |
+| `transaction_session.completed` / `.expired` | — | Payment session finished or timed out (sent to the session `callbackUrl`) |
+| `customer.*` (15 events)         | —         | Customer lifecycle, virtual bank account & deposit events (HMAC-signed)      |
+
+See the [webhook docs](https://docs.100pay.co/docs/webhooks) for payload schemas of every event.
 
 > **Security Note:** Always verify webhook authenticity and use the SDK's `verify()` method to confirm transaction details before updating your system.
 
@@ -1608,7 +1642,7 @@ async function onWebhookReceived(payload: any) {
 }
 ```
 
-> **Note:** Refer to the [100Pay API documentation](https://documenter.getpostman.com/view/13045730/2s93RMUatE) for a complete list of webhook events and their payloads.
+> **Note:** Refer to the [100Pay webhook documentation](https://docs.100pay.co/docs/webhooks) for the complete list of webhook events, payload schemas, delivery headers, and retry behavior.
 
 ## Resources
 
