@@ -750,14 +750,25 @@ export class Pay100 {
      * @throws Error if the transfer fails due to validation, insufficient funds, or other issues
      */
     executeTransfer: async (
-      data: ITransferAssetData
+      data: ITransferAssetData,
+      options?: IIdempotentRequestOptions
     ): Promise<ITransferAssetResponse> => {
-      const { oauthAccessToken, ...transferData } = data;
+      const { oauthAccessToken, idempotencyKey: directKey, ...transferData } = data;
+      const idempotencyKey =
+        options?.idempotencyKey ||
+        (directKey as string) ||
+        (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : undefined);
+
       return this.request<ITransferAssetResponse>(
         "POST",
         "/api/v1/transfer/asset",
         transferData,
-        oauthAccessToken ? { Authorization: `Bearer ${oauthAccessToken}` } : {}
+        {
+          ...(oauthAccessToken ? { Authorization: `Bearer ${oauthAccessToken}` } : {}),
+          ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+        }
       );
     },
 

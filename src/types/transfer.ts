@@ -38,6 +38,14 @@ export interface ITransferAssetData extends Record<string, unknown> {
   note?: string;
   /** Optional Access Token for OAuth 2.0 authentication */
   oauthAccessToken?: string;
+  /** Optional Idempotency-Key for safe retries (UUID or printable ASCII) */
+  idempotencyKey?: string;
+  /** Optional Transaction PIN for user verification */
+  transactionPin?: string;
+  /** Optional 6-digit PIN alias */
+  pin?: string;
+  /** Optional TOTP / authenticator code for MFA */
+  totpCode?: string;
   /**
    * Enable multi-wallet waterfall mode.
    * When true, balances from multiple wallets are combined to meet the transfer amount.
